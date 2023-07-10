@@ -3,14 +3,13 @@ extends EditorPlugin
 
 enum Mode { NORMAL, INSERT, VISUAL, VISUAL_LINE, COMMAND }
 
-# For the "w" "b" and "e" commands respectively
+# Used for commands like "w" "b" and "e" respectively
 enum WordEdgeMode { WORD, BEGINNING, END }
 
 const SPACES: String = " \t"
-const KEYWORDS: String = ".,\"'-=()[]{}:!~/\\" # TODO incomplete
+const KEYWORDS: String = ".,\"'-=()[]{}:!?~/\\#"
 const PRIMARY_MOTIONS: String = "ia" # Idk what to call these lol
-# TODO add p, ", ', (, [, {, and some that I might have forgotten
-const SECONDARY_MOTIONS: String = "wW" # Idk what to call these lol
+const SECONDARY_MOTIONS: String = "wWp\"'([{" # Idk what to call these lol
 
 
 class StatusBar:
@@ -98,11 +97,26 @@ class CommandLine:
 		show()
 		
 		text_submitted.connect(_on_text_submitted)
+		text_changed.connect(_on_text_changed)
 		editable = true
 	
 	func set_command(cmd: String):
 		text = cmd
 		caret_column = text.length()
+	
+	func _on_text_changed(cmd: String):
+		if !cmd.begins_with('/'):	return
+		var pattern: String = cmd.substr(1)
+		# TODO use regex
+		var pos: Vector2i = code_edit.search(pattern, 0, cursor.get_line(), cursor.get_column()+1)
+		if pos.x == -1:
+			code_edit.remove_secondary_carets()
+			return
+		if code_edit.get_caret_count() < 2:
+			code_edit.add_caret(pos.y, pos.x)
+		code_edit.select(pos.y, pos.x, pos.y, pos.x + pattern.length(), 1)
+		# code_edit.center_viewport_to_caret(1)
+		code_edit.scroll_vertical = code_edit.get_scroll_pos_for_line(pos.y)
 	
 	func handle_command(cmd: String):
 		if cmd.begins_with('/'):
@@ -114,8 +128,14 @@ class CommandLine:
 			else:
 				status_bar.display_error('Pattern not found: "%s"' % [search_pattern])
 			cursor.set_mode(Mode.NORMAL)
-		
 			return
+		
+		if cmd.trim_prefix(':').is_valid_int():
+			var line: int = cmd.trim_prefix(':').to_int()
+			cursor.set_caret_pos(line, 0)
+			cursor.set_mode(Mode.NORMAL)
+			return
+		
 		if cmd.begins_with(':marks'):
 			var marks: Dictionary = globals.get('marks', {})
 			if marks.is_empty():
@@ -196,8 +216,9 @@ class Cursor:
 			code_edit.release_focus()
 			self.grab_focus()
 	
-	func _unhandled_input(event):
+	func _input(event):
 		if Input.is_key_pressed(KEY_ESCAPE):
+			code_edit.cancel_code_completion()
 			input_stream = ''
 			set_mode(Mode.NORMAL)
 			selection_from = Vector2i.ZERO
@@ -205,8 +226,7 @@ class Cursor:
 			set_column(code_edit.get_caret_column())
 			return
 		draw_cursor()
-	
-	func _input(event):
+		
 		if !has_focus():	return
 		if !event is InputEventKey:	return
 		if !event.pressed:	return
@@ -230,6 +250,7 @@ class Cursor:
 		input_stream += ch
 		status_bar.display_text(input_stream)
 		input_stream = handle_input_stream(input_stream)
+	
 	
 	func handle_input_stream(stream: String) -> String:
 		# BEHOLD, THE IF STATEMENT HELL!!! MUAHAHAHAHa
@@ -258,8 +279,31 @@ class Cursor:
 			set_caret_pos(p.y, p.x)
 			return ''
 		
+		if stream.to_lower() .begins_with('f') or stream.to_lower() .begins_with('t'):
+			if stream.length() == 1:	return stream
+			
+			var char: String = stream[1] # TODO check for <TAB>, <CR> and <Ctrl-somethign>
+			globals.last_search = stream.left(2) # First 2 in case it's longer
+			var col: int = find_char_motion(get_line(), get_column(), stream[0], char)
+			if col >= 0:
+				set_column(col)
+			return ''
+		if stream.begins_with(';') and globals.has('last_search'):
+			var cmd: String = globals.last_search[0]
+			var col: int = find_char_motion(get_line(), get_column(), cmd, globals.last_search[1])
+			if col >= 0:
+				set_column(col)
+			return ''
+		if stream.begins_with(',') and globals.has('last_search'):
+			var cmd: String = globals.last_search[0]
+			cmd = cmd.to_upper() if is_lowercase(cmd) else cmd.to_lower()
+			var col: int = find_char_motion(get_line(), get_column(), cmd, globals.last_search[1])
+			if col >= 0:
+				set_column(col)
+			return ''
+		
 		if mode == Mode.VISUAL: # TODO make it work for visual line too
-			var range: Array = calc_secondary_motion_region(selection_to, stream)
+			var range: Array = calc_double_motion_region(selection_to, stream)
 			if range.size() == 1:	return stream
 			if range.size() == 2:
 				selection_from = range[0]
@@ -289,7 +333,7 @@ class Cursor:
 				move_line(+1)
 				return ''
 			
-			var range: Array = calc_secondary_motion_region(get_caret_pos(), stream, 1)
+			var range: Array = calc_double_motion_region(get_caret_pos(), stream, 1)
 			if range.size() == 0:	return ''
 			if range.size() == 1:	return stream
 			if range.size() == 2:
@@ -331,7 +375,19 @@ class Cursor:
 			if stream.begins_with('gg'):
 				set_line(0)
 				return ''
+			
+			if stream.begins_with('gc') and is_mode_visual(mode):
+				code_edit.begin_complex_operation()
+				for line in range( min(selection_from.y, selection_to.y), max(selection_from.y, selection_to.y)+1 ):
+					toggle_comment(line)
+				code_edit.end_complex_operation()
+				set_mode(Mode.NORMAL)
+				return ''
+			if stream.begins_with('gcc') and mode == Mode.NORMAL:
+				toggle_comment(get_line())
+				return ''
 			return stream
+		
 		if stream == '0':
 			set_column(0)
 			return ''
@@ -366,7 +422,8 @@ class Cursor:
 			var ind: int = code_edit.get_first_non_whitespace_column(get_line())
 			if code_edit.get_line(get_line()).ends_with(':'):
 				ind += 1
-			code_edit.insert_line_at(get_line()+1, "\t".repeat(ind))
+			var line: int = code_edit.get_caret_line()
+			code_edit.insert_line_at(line + int(line < code_edit.get_line_count() - 1), "\t".repeat(ind))
 			move_line(+1)
 			set_column(ind)
 			set_mode(Mode.INSERT)
@@ -418,7 +475,7 @@ class Cursor:
 				move_column(0)
 				code_edit.deselect()
 			
-			var range: Array = calc_secondary_motion_region(get_caret_pos(), stream, 1)
+			var range: Array = calc_double_motion_region(get_caret_pos(), stream, 1)
 			if range.size() == 0:	return ''
 			if range.size() == 1:	return stream
 			if range.size() == 2:
@@ -427,7 +484,7 @@ class Cursor:
 				code_edit.deselect()
 			return ''
 		
-		if stream.begins_with(':') and mode == Mode.NORMAL:
+		if stream.begins_with(':') and mode == Mode.NORMAL: # Could make this work with visual too ig
 			set_mode(Mode.COMMAND)
 			command_line.set_command(':')
 			return ''
@@ -464,7 +521,7 @@ class Cursor:
 				set_mode(Mode.INSERT)
 				return ''
 			
-			var range: Array = calc_secondary_motion_region(get_caret_pos(), stream, 1)
+			var range: Array = calc_double_motion_region(get_caret_pos(), stream, 1)
 			if range.size() == 0:	return ''
 			if range.size() == 1:	return stream
 			if range.size() == 2:
@@ -500,6 +557,34 @@ class Cursor:
 				code_edit.unindent_lines()
 			return ''
 		
+		if stream.begins_with('}'):
+			var line: int = get_line()
+			var prev_empty: bool = code_edit.get_line(line) .strip_edges().is_empty()
+			line += 1
+			while line < code_edit.get_line_count():
+				var text: String = code_edit.get_line(line).strip_edges()
+				if text.is_empty() and !prev_empty:
+					set_caret_pos(line, text.length())
+					return ''
+				prev_empty = text.is_empty()
+				line += 1
+			set_caret_pos(line, 0)
+			return ''
+		
+		if stream.begins_with('{'):
+			var line: int = get_line()
+			var prev_empty: bool = code_edit.get_line(line) .strip_edges().is_empty()
+			line -= 1
+			while line >= 0:
+				var text: String = code_edit.get_line(line).strip_edges()
+				if text.is_empty() and !prev_empty:
+					set_caret_pos(line, text.length())
+					break
+				prev_empty = text.is_empty()
+				line -= 1
+			set_caret_pos(line, 0)
+			return ''
+		
 		if stream.begins_with('m') and mode == Mode.NORMAL:
 			if stream.length() < 2: 	return stream
 			if !globals.has('marks'):	globals.marks = {}
@@ -509,7 +594,7 @@ class Cursor:
 				status_bar.display_error('Marks must be between a-z or A-Z')
 				return ''
 			globals.marks[m] = {
-				'file' : "res://addons/godot_vim/plugin.gd",
+				'file' : globals.script_editor.get_current_script().resource_path,
 				'pos' : Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
 			}
 			status_bar.display_text('Mark "%s" set' % m, TEXT_DIRECTION_LTR)
@@ -525,7 +610,8 @@ class Cursor:
 			return ''
 		return ''
 	
-	# Used for motions like "w", "b", and "e"
+	
+	# Mostly used for commands like "w", "b", and "e"
 	# delims is the keywords / characters used as delimiters. Usually, it's the constant KEYWORDS
 	func get_word_edge_pos(from_line: int, from_col: int, delims: String, mode: WordEdgeMode) -> Vector2i:
 		var search_dir: int = -1 if mode == WordEdgeMode.BEGINNING else 1
@@ -540,7 +626,7 @@ class Cursor:
 				if SPACES.contains(char):
 					col += search_dir
 					continue
-				# Please don't question this line... or whole function lmao. It just works, alight?
+				# Please don't question this lmao. It just works, alight?
 				var other_char: String = ' ' if col == (text.length()-1) * int(char_offset > 0) else text[col + char_offset]
 				
 				if SPACES.contains(other_char):
@@ -553,15 +639,33 @@ class Cursor:
 			col = (text.length() - 1) * int(search_dir < 0 and char_offset < 0)
 		return Vector2i(from_col, from_line)
 	
-	# Currently only supports "iw" and "iW"
-	# returns: [ Vector2i from_pos, Vector2i to_pos ] (length 2) or [ Vector2i ] (length 1) if it's "incomplete"
-	func calc_secondary_motion_region(from_pos: Vector2i, stream: String, from_char: int = 0) -> Array[Vector2i]:
+	# motion: command like "f", "t", "F", or "T"
+	func find_char_motion(in_line: int, from_col: int, motion: String, char: String) -> int:
+		var search_dir: int = 1 if is_lowercase(motion) else -1
+		var offset: int = int(motion == 'T') - int(motion == 't') # 1 if T,  -1 if t,  0 otherwise
+		var text: String = get_line_text(in_line)
+		
+		var col: int = -1
+		if motion == 'f' or motion == 't':
+			col = text.find(char, from_col + search_dir)
+		elif motion == 'F' or motion == 'T':
+			col = text.rfind(char, from_col + search_dir)
+		if col == -1:
+			return -1
+		return col + offset
+	
+	# returns: [ Vector2i from_pos, Vector2i to_pos ]
+	func calc_double_motion_region(from_pos: Vector2i, stream: String, from_char: int = 0) -> Array[Vector2i]:
 		var primary: String = get_stream_char(stream, from_char)
 		var secondary: String = get_stream_char(stream, from_char + 1)
-		if primary == '':							return [from_pos]
-		if !PRIMARY_MOTIONS.contains(primary):		return []
-		if secondary == '':							return [from_pos]
-		if !SECONDARY_MOTIONS.contains(secondary):	return []
+		if primary == '':
+			return [from_pos]
+		if !PRIMARY_MOTIONS.contains(primary):
+			return []
+		if secondary == '':
+			return [from_pos]
+		# if !SECNDARY_MOTIONS.contains(secondary):
+			# return []
 		
 		if primary == 'i' and secondary.to_lower() == 'w':
 			var p0: Vector2i = get_word_edge_pos(from_pos.y, from_pos.x + 1, '' if secondary == 'W' else KEYWORDS, WordEdgeMode.BEGINNING)
@@ -569,18 +673,33 @@ class Cursor:
 			return [ p0, p1 ]
 		
 		return []
-
+	
+	func toggle_comment(line: int):
+		var ind: int = code_edit.get_first_non_whitespace_column(line)
+		var text: String = get_line_text(line)
+		# Comment line
+		if text[ind] != '#':
+			code_edit.set_line(line, text.insert(ind, '# '))
+			return
+		# Uncomment line
+		var start_col: int = get_word_edge_pos(line, ind, KEYWORDS, WordEdgeMode.WORD).x
+		code_edit.select(line, ind, line, start_col)
+		code_edit.delete_selection()
+	
 	func set_mode(m: int):
 		var old_mode: int = mode
 		mode = m
 		command_line.close()
 		match mode:
 			Mode.NORMAL:
+				code_edit.remove_secondary_carets()
 				code_edit.deselect()
 				code_edit.release_focus()
 				code_edit.deselect()
 				self.grab_focus()
 				status_bar.set_mode_text(Mode.NORMAL)
+				if old_mode == Mode.INSERT:
+					move_column(-1)
 			Mode.VISUAL:
 				if old_mode != Mode.VISUAL_LINE:
 					selection_from = Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
@@ -664,6 +783,12 @@ class Cursor:
 	func is_mode_visual(m: int) -> bool:
 		return m == Mode.VISUAL or m == Mode.VISUAL_LINE
 	
+	func is_lowercase(text: String) -> bool:
+		return text == text.to_lower()
+	
+	func is_uppercase(text: String) -> bool:
+		return text == text.to_upper()
+	
 	func get_stream_char(stream: String, idx: int) -> String:
 		return stream[idx] if stream.length() > idx else ''
 	
@@ -672,14 +797,14 @@ class Cursor:
 			selection_from = Vector2i(code_edit.get_selection_from_column(), code_edit.get_selection_from_line())
 			selection_to = Vector2i(code_edit.get_selection_to_column(), code_edit.get_selection_to_line())
 		
-		if code_edit.get_selected_text().length() > 1 and !is_mode_visual(mode):
+		if code_edit.get_selected_text(0).length() > 1 and !is_mode_visual(mode):
 			code_edit.release_focus()
 			self.grab_focus()
 			set_mode(Mode.VISUAL)
 		
 		if mode == Mode.INSERT:
-			if code_edit.has_selection():
-				code_edit.deselect()
+			if code_edit.has_selection(0):
+				code_edit.deselect(0)
 			return
 		
 		if mode != Mode.NORMAL:
@@ -728,7 +853,6 @@ func edit_script(path: String, pos: Vector2i):
 	if script == null:
 		status_bar.display_error('Could not open file "%s"' % path)
 		return ''
-	# .edit_script(script, line, col) doesn't work. It sets the caret line but not the column (engine bug??)
 	editor_interface.edit_script(script)
 	cursor.call_deferred('set_caret_pos', pos.y, pos.x)
 
@@ -782,8 +906,7 @@ func get_code_edit():
 	var editor = get_editor_interface().get_script_editor().get_current_editor()
 	return _select(editor, ['VSplitContainer', 'CodeTextEditor', 'CodeEdit'])
 
-# I am a bit confused.
-func _select(obj: Node, types: Array[String]):
+func _select(obj: Node, types: Array[String]): # ???
 	for type in types:
 		for child in obj.get_children():
 			if child.is_class(type):
