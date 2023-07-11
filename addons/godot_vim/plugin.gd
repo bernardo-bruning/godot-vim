@@ -107,23 +107,30 @@ class CommandLine:
 	func _on_text_changed(cmd: String):
 		if !cmd.begins_with('/'):	return
 		var pattern: String = cmd.substr(1)
-		# TODO use regex
-		var pos: Vector2i = code_edit.search(pattern, 0, cursor.get_line(), cursor.get_column()+1)
-		if pos.x == -1:
+		var rmatch: RegExMatch = globals.vim_plugin.search_regex(
+			code_edit,
+			pattern,
+			cursor.get_caret_pos() + Vector2i.RIGHT
+		)
+		if rmatch == null:
 			code_edit.remove_secondary_carets()
 			return
+		var pos: Vector2i = globals.vim_plugin.idx_to_pos(code_edit, rmatch.get_start())
 		if code_edit.get_caret_count() < 2:
 			code_edit.add_caret(pos.y, pos.x)
-		code_edit.select(pos.y, pos.x, pos.y, pos.x + pattern.length(), 1)
-		# code_edit.center_viewport_to_caret(1)
+		code_edit.select(pos.y, pos.x, pos.y, pos.x + rmatch.get_string().length(), 1)
 		code_edit.scroll_vertical = code_edit.get_scroll_pos_for_line(pos.y)
 	
 	func handle_command(cmd: String):
 		if cmd.begins_with('/'):
 			search_pattern = cmd.substr(1)
-			# TODO use regex
-			var pos: Vector2i = code_edit.search(search_pattern, 0, cursor.get_line(), cursor.get_column()+1)
-			if pos.x != -1:
+			var rmatch: RegExMatch = globals.vim_plugin.search_regex(
+				code_edit,
+				search_pattern,
+				cursor.get_caret_pos() + Vector2i.RIGHT
+			)
+			if rmatch != null:
+				var pos: Vector2i = globals.vim_plugin.idx_to_pos(code_edit, rmatch.get_start())
 				cursor.set_caret_pos(pos.y, pos.x)
 			else:
 				status_bar.display_error('Pattern not found: "%s"' % [search_pattern])
@@ -183,6 +190,7 @@ class CommandLine:
 			status_bar.main_label.text = ''
 			return
 		handle_command(new_text)
+
 
 
 
@@ -493,13 +501,24 @@ class Cursor:
 			command_line.set_command('/')
 			return ''
 		if stream.begins_with('n'):
-			var pos: Vector2i = code_edit.search(command_line.search_pattern, 0, get_line(), get_column()+1)
-			if pos.x != -1:
+			var rmatch: RegExMatch = globals.vim_plugin.search_regex(
+				code_edit,
+				command_line.search_pattern,
+				get_caret_pos() + Vector2i.RIGHT
+			)
+			if rmatch != null:
+				var pos: Vector2i = globals.vim_plugin.idx_to_pos(code_edit,rmatch.get_start())
 				set_caret_pos(pos.y, pos.x)
 			return ''
 		if stream.begins_with('N'):
-			var pos: Vector2i = code_edit.search(command_line.search_pattern, 4, get_line(), get_column()-1)
-			if pos.x != -1:
+			var rmatch: RegExMatch = globals.vim_plugin.search_regex(
+				code_edit,
+				command_line.search_pattern,
+				get_caret_pos() + Vector2i.LEFT,
+				true
+			)
+			if rmatch != null:
+				var pos: Vector2i = globals.vim_plugin.idx_to_pos(code_edit,rmatch.get_start())
 				set_caret_pos(pos.y, pos.x)
 			return ''
 		
@@ -921,3 +940,30 @@ func _exit_tree():
 		command_line.queue_free()
 	if status_bar != null:
 		status_bar.queue_free()
+
+
+# -------------------------------------------------------------
+# ** UTIL **
+# -------------------------------------------------------------
+
+func search_regex(text_edit: TextEdit, pattern: String, from_pos: Vector2i, backwards: bool = false) -> RegExMatch:
+	var regex: RegEx = RegEx.new()
+	var err: int = regex.compile(pattern)
+	var idx: int = pos_to_idx(text_edit, from_pos)
+	if backwards:
+		# We use pop_back() so it doesn't print an error
+		return regex.search_all(text_edit.text, 0, idx).pop_back()
+	return regex.search(text_edit.text, idx)
+
+func pos_to_idx(text_edit: TextEdit, pos: Vector2i) -> int:
+	text_edit.select(0, 0, pos.y, pos.x)
+	var len: int = text_edit.get_selected_text().length()
+	text_edit.deselect()
+	return len
+
+func idx_to_pos(text_edit: TextEdit, idx: int) -> Vector2i:
+	var line: int = text_edit.text .count('\n', 0, idx)
+	var col: int = idx - text_edit.text .rfind('\n', idx) - 1
+	return Vector2i(col, line)
+
+
