@@ -323,6 +323,7 @@ class Cursor:
 			code_edit.deselect()
 			code_edit.insert_text_at_caret(' ')
 			code_edit.end_complex_operation()
+			globals.last_command = stream
 			return ''
 		if stream.begins_with('d'):
 			if is_mode_visual(mode):
@@ -337,6 +338,7 @@ class Cursor:
 				DisplayServer.clipboard_set( '\r' + code_edit.get_selected_text() )
 				code_edit.delete_selection()
 				move_line(+1)
+				globals.last_command = stream
 				return ''
 			
 			var range: Array = calc_double_motion_region(get_caret_pos(), stream, 1)
@@ -345,11 +347,13 @@ class Cursor:
 			if range.size() == 2:
 				code_edit.select(range[0].y, range[0].x, range[1].y, range[1].x + 1)
 				code_edit.cut()
+				globals.last_command = stream
 			return ''
-			
+		
 		if mode == Mode.NORMAL and stream.begins_with('D'):
 			code_edit.select( get_line(), code_edit.get_caret_column(), get_line(), get_line_length() )
 			code_edit.cut()
+			globals.last_command = stream
 			return ''
 		if stream.begins_with('p'):
 			code_edit.begin_complex_operation()
@@ -364,6 +368,7 @@ class Cursor:
 			move_column(-1)
 			code_edit.end_complex_operation()
 			set_mode(Mode.NORMAL)
+			globals.last_command = stream
 			return ''
 		if stream.begins_with('P'):
 			status_bar.display_error("Unimplemented command: P")
@@ -391,6 +396,7 @@ class Cursor:
 				return ''
 			if stream.begins_with('gcc') and mode == Mode.NORMAL:
 				toggle_comment(get_line())
+				globals.last_command = stream
 				return ''
 			return stream
 		
@@ -418,7 +424,7 @@ class Cursor:
 		if stream == 'V':
 			set_mode(Mode.VISUAL_LINE)
 			return ''
-		if stream == 'o':
+		if stream.begins_with('o'):
 			if is_mode_visual(mode):
 				var tmp: Vector2i = selection_from
 				selection_from = selection_to
@@ -433,21 +439,26 @@ class Cursor:
 			move_line(+1)
 			set_column(ind)
 			set_mode(Mode.INSERT)
+			globals.last_command = stream
 			return ''
-		if stream == 'O' and mode == Mode.NORMAL:
+		if stream.begins_with('O') and mode == Mode.NORMAL:
 			var ind: int = code_edit.get_first_non_whitespace_column(get_line())
 			code_edit.insert_line_at(get_line(), "\t".repeat(ind))
 			move_line(-1)
 			set_column(ind)
 			set_mode(Mode.INSERT)
+			globals.last_command = stream
 			return ''
+		
 		if stream == 'x':
 			code_edit.copy()
 			code_edit.delete_selection()
+			globals.last_command = stream
 			return ''
 		if stream.begins_with('s'):
 			code_edit.cut()
 			set_mode(Mode.INSERT)
+			return ''
 		if stream == 'u':
 			code_edit.undo()
 			set_mode(Mode.NORMAL)
@@ -467,6 +478,7 @@ class Cursor:
 			code_edit.insert_text_at_caret(ch)
 			move_column(-1)
 			code_edit.end_complex_operation()
+			globals.last_command = stream
 			return ''
 		if stream.begins_with('y'):
 			if is_mode_visual(mode):
@@ -488,6 +500,12 @@ class Cursor:
 				code_edit.select(range[0].y, range[0].x, range[1].y, range[1].x + 1)
 				code_edit.copy()
 				code_edit.deselect()
+			return ''
+		
+		if stream == '.':
+			if globals.has('last_command'):
+				handle_input_stream(globals.last_command)
+				call_deferred(&'set_mode', Mode.NORMAL)
 			return ''
 		
 		if stream.begins_with(':') and mode == Mode.NORMAL: # Could make this work with visual too ig
@@ -535,6 +553,7 @@ class Cursor:
 				code_edit.end_complex_operation()
 				move_line(+1)
 				set_mode(Mode.INSERT)
+				globals.last_command = stream
 				return ''
 			
 			var range: Array = calc_double_motion_region(get_caret_pos(), stream, 1)
@@ -544,11 +563,13 @@ class Cursor:
 				code_edit.select(range[0].y, range[0].x, range[1].y, range[1].x + 1)
 				code_edit.cut()
 				set_mode(Mode.INSERT)
+				globals.last_command = stream
 			return ''
 		if mode == Mode.NORMAL and stream.begins_with('C'):
 			code_edit.select( get_line(), code_edit.get_caret_column(), get_line(), get_line_length() )
 			code_edit.cut()
 			set_mode(Mode.INSERT)
+			globals.last_command = stream
 			return ''
 		if stream.begins_with('z'):
 			if stream.begins_with('zz') and mode == Mode.NORMAL:
@@ -563,6 +584,7 @@ class Cursor:
 			if stream.length() == 1:	return stream
 			if stream.begins_with('>>') and mode == Mode.NORMAL:
 				code_edit.indent_lines()
+				globals.last_command = stream
 				return ''
 		if stream.begins_with('<'):
 			if is_mode_visual(mode) and stream.length() == 1:
@@ -571,6 +593,7 @@ class Cursor:
 			if stream.length() == 1:	return stream
 			if stream.begins_with('<<') and mode == Mode.NORMAL:
 				code_edit.unindent_lines()
+				globals.last_command = stream
 			return ''
 		
 		if stream.begins_with('}'):
