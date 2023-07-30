@@ -7,9 +7,7 @@ enum Mode { NORMAL, INSERT, VISUAL, VISUAL_LINE, COMMAND }
 enum WordEdgeMode { WORD, BEGINNING, END }
 
 const SPACES: String = " \t"
-const KEYWORDS: String = ".,\"'-=()[]{}:!?~/\\#"
-const PRIMARY_MOTIONS: String = "ia" # Idk what to call these lol
-const SECONDARY_MOTIONS: String = "wWp\"'([{" # Idk what to call these lol
+const KEYWORDS: String = ".,\"'-=+!@#$%^&*()[]{}?~/\\<>"
 
 
 class StatusBar:
@@ -511,11 +509,10 @@ class Cursor:
 				set_caret_pos(pos.y, pos.x)
 			return ''
 		if stream.begins_with('N'):
-			var rmatch: RegExMatch = globals.vim_plugin.search_regex(
+			var rmatch: RegExMatch = globals.vim_plugin.search_regex_backwards(
 				code_edit,
 				command_line.search_pattern,
-				get_caret_pos() + Vector2i.LEFT,
-				true
+				get_caret_pos() + Vector2i.LEFT
 			)
 			if rmatch != null:
 				var pos: Vector2i = globals.vim_plugin.idx_to_pos(code_edit,rmatch.get_start())
@@ -577,31 +574,13 @@ class Cursor:
 			return ''
 		
 		if stream.begins_with('}'):
-			var line: int = get_line()
-			var prev_empty: bool = code_edit.get_line(line) .strip_edges().is_empty()
-			line += 1
-			while line < code_edit.get_line_count():
-				var text: String = code_edit.get_line(line).strip_edges()
-				if text.is_empty() and !prev_empty:
-					set_caret_pos(line, text.length())
-					return ''
-				prev_empty = text.is_empty()
-				line += 1
-			set_caret_pos(line, 0)
+			var para_edge: Vector2i = get_paragraph_edge_pos( get_line(), 1 )
+			set_caret_pos(para_edge.y, para_edge.x)
 			return ''
 		
 		if stream.begins_with('{'):
-			var line: int = get_line()
-			var prev_empty: bool = code_edit.get_line(line) .strip_edges().is_empty()
-			line -= 1
-			while line >= 0:
-				var text: String = code_edit.get_line(line).strip_edges()
-				if text.is_empty() and !prev_empty:
-					set_caret_pos(line, text.length())
-					break
-				prev_empty = text.is_empty()
-				line -= 1
-			set_caret_pos(line, 0)
+			var para_edge: Vector2i = get_paragraph_edge_pos( get_line(), -1 )
+			set_caret_pos(para_edge.y, para_edge.x)
 			return ''
 		
 		if stream.begins_with('m') and mode == Mode.NORMAL:
@@ -658,6 +637,18 @@ class Cursor:
 			col = (text.length() - 1) * int(search_dir < 0 and char_offset < 0)
 		return Vector2i(from_col, from_line)
 	
+	func get_paragraph_edge_pos(from_line: int, search_dir: int):
+		var line: int = from_line
+		var prev_empty: bool = code_edit.get_line(line) .strip_edges().is_empty()
+		line += search_dir
+		while line >= 0 and line < code_edit.get_line_count():
+			var text: String = code_edit.get_line(line) .strip_edges()
+			if text.is_empty() and !prev_empty:
+				return Vector2i(text.length(), line)
+			prev_empty = text.is_empty()
+			line += search_dir
+		return Vector2i(0, line)
+	
 	# motion: command like "f", "t", "F", or "T"
 	func find_char_motion(in_line: int, from_col: int, motion: String, char: String) -> int:
 		var search_dir: int = 1 if is_lowercase(motion) else -1
@@ -678,20 +669,41 @@ class Cursor:
 		var primary: String = get_stream_char(stream, from_char)
 		var secondary: String = get_stream_char(stream, from_char + 1)
 		if primary == '':
-			return [from_pos]
-		if !PRIMARY_MOTIONS.contains(primary):
-			return []
+			return [from_pos] # Incomplete
+		
+		if primary.to_lower() == 'w':
+			var p1: Vector2i = get_word_edge_pos(from_pos.y, from_pos.x, '' if primary == 'W' else KEYWORDS, WordEdgeMode.WORD)
+			return [from_pos, p1 + Vector2i.LEFT]
+		if primary.to_lower() == 'b':
+			var p0: Vector2i = get_word_edge_pos(from_pos.y, from_pos.x, '' if primary == 'B' else KEYWORDS, WordEdgeMode.BEGINNING)
+			return [p0, from_pos + Vector2i.LEFT]
+		if primary.to_lower() == 'e':
+			var p1: Vector2i = get_word_edge_pos(from_pos.y, from_pos.x, '' if primary == 'E' else KEYWORDS, WordEdgeMode.END)
+			return [from_pos, p1]
+		
+		if primary == '$':
+			var p1: Vector2i = Vector2i(get_line_length(from_pos.y), from_pos.y)
+			return [from_pos, p1]
+		if primary == '^':
+			var p0: Vector2i = Vector2i(code_edit.get_first_non_whitespace_column(from_pos.y), from_pos.y)
+			return [p0, from_pos + Vector2i.LEFT]
+		
+		if primary != 'i' and primary != 'a':
+			return [] # Invalid
 		if secondary == '':
-			return [from_pos]
-		# if !SECNDARY_MOTIONS.contains(secondary):
-			# return []
+			return [from_pos] # Incomplete
 		
 		if primary == 'i' and secondary.to_lower() == 'w':
 			var p0: Vector2i = get_word_edge_pos(from_pos.y, from_pos.x + 1, '' if secondary == 'W' else KEYWORDS, WordEdgeMode.BEGINNING)
 			var p1: Vector2i = get_word_edge_pos(from_pos.y, from_pos.x - 1, '' if secondary == 'W' else KEYWORDS, WordEdgeMode.END)
 			return [ p0, p1 ]
 		
-		return []
+		if primary == 'i' and secondary == 'p':
+			var p0: Vector2i = get_paragraph_edge_pos(from_pos.y + 1, -1) + Vector2i.DOWN
+			var p1: Vector2i = get_paragraph_edge_pos(from_pos.y - 1, 1)
+			return [ p0, p1 ]
+		
+		return [] # Unknown combination
 	
 	func toggle_comment(line: int):
 		var ind: int = code_edit.get_first_non_whitespace_column(line)
@@ -946,14 +958,24 @@ func _exit_tree():
 # ** UTIL **
 # -------------------------------------------------------------
 
-func search_regex(text_edit: TextEdit, pattern: String, from_pos: Vector2i, backwards: bool = false) -> RegExMatch:
+func search_regex(text_edit: TextEdit, pattern: String, from_pos: Vector2i) -> RegExMatch:
 	var regex: RegEx = RegEx.new()
 	var err: int = regex.compile(pattern)
 	var idx: int = pos_to_idx(text_edit, from_pos)
-	if backwards:
-		# We use pop_back() so it doesn't print an error
-		return regex.search_all(text_edit.text, 0, idx).pop_back()
-	return regex.search(text_edit.text, idx)
+	var res: RegExMatch = regex.search(text_edit.text, idx)
+	if res == null:
+		return regex.search(text_edit.text, 0)
+	return res
+
+func search_regex_backwards(text_edit: TextEdit, pattern: String, from_pos: Vector2i) -> RegExMatch:
+	var regex: RegEx = RegEx.new()
+	var err: int = regex.compile(pattern)
+	var idx: int = pos_to_idx(text_edit, from_pos)
+	# We use pop_back() so it doesn't print an error
+	var res: RegExMatch = regex.search_all(text_edit.text, 0, idx).pop_back()
+	if res ==  null:
+		return regex.search_all(text_edit.text).pop_back()
+	return res
 
 func pos_to_idx(text_edit: TextEdit, pos: Vector2i) -> int:
 	text_edit.select(0, 0, pos.y, pos.x)
