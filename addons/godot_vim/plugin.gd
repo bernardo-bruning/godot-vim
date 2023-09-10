@@ -7,7 +7,8 @@ enum Mode { NORMAL, INSERT, VISUAL, VISUAL_LINE, COMMAND }
 enum WordEdgeMode { WORD, BEGINNING, END }
 
 const SPACES: String = " \t"
-const KEYWORDS: String = ".,\"'-=+!@#$%^&*()[]{}?~/\\<>"
+const KEYWORDS: String = ".,\"'-=+!@#$%^&*()[]{}?~/\\<>:;"
+const DIGITS: String = "0123456789"
 
 
 class StatusBar:
@@ -255,7 +256,14 @@ class Cursor:
 		
 		input_stream += ch
 		status_bar.display_text(input_stream)
-		input_stream = handle_input_stream(input_stream)
+		
+		var s: int = globals.vim_plugin.get_first_non_digit_idx(input_stream)
+		if s == -1:	return # All digits
+		
+		var cmd: String = input_stream.substr(s)
+		var count: int = maxi( input_stream.left(s).to_int(), 1 )
+		for i in count:
+			input_stream = handle_input_stream(cmd)
 	
 	
 	func handle_input_stream(stream: String) -> String:
@@ -1011,4 +1019,11 @@ func idx_to_pos(text_edit: TextEdit, idx: int) -> Vector2i:
 	var col: int = idx - text_edit.text .rfind('\n', idx) - 1
 	return Vector2i(col, line)
 
+func get_first_non_digit_idx(str: String) -> int:
+	if str.is_empty():	return -1
+	if str[0] == '0':	return 0 # '0...' is an exception
+	for i in str.length():
+		if !DIGITS.contains(str[i]):
+			return i
+	return -1 # All digits
 
