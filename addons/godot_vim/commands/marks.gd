@@ -2,7 +2,7 @@ const Contants = preload("res://addons/godot_vim/constants.gd")
 const StatusBar = preload("res://addons/godot_vim/status_bar.gd")
 const Mode = Contants.Mode
 
-func execute(api, _args = null):
+func execute(api, _args):
 	var marks: Dictionary = api.get('marks', {})
 	if marks.is_empty():
 		api.status_bar.display_error("No marks set")

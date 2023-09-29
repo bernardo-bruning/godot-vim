@@ -2,7 +2,8 @@ extends LineEdit
 
 const Cursor = preload("res://addons/godot_vim/cursor.gd")
 const StatusBar = preload("res://addons/godot_vim/status_bar.gd")
-const Constants= preload("res://addons/godot_vim/constants.gd")
+const Constants = preload("res://addons/godot_vim/constants.gd")
+const Dispatcher = preload("res://addons/godot_vim/dispatcher.gd")
 const Mode = Constants.Mode
 
 const Marks = preload("res://addons/godot_vim/commands/marks.gd")
@@ -13,11 +14,14 @@ var code_edit: CodeEdit
 var cursor: Cursor
 var status_bar: StatusBar
 var globals: Dictionary
+var dispatcher: Dispatcher
 
 var is_paused: bool = false
 var search_pattern: String = ''
 
 func _ready():
+	dispatcher = Dispatcher.new()
+	dispatcher.globals = globals
 	placeholder_text = "Enter command..."
 	show()
 	
@@ -57,22 +61,10 @@ func handle_command(cmd: String):
 		goto.execute(globals, cmd.trim_prefix(':'))
 		return
 	
-	if cmd.begins_with(':marks'):
-		var marks = Marks.new()
-		marks.execute(globals)
+	if dispatcher.dispatch(cmd) == OK:
 		set_paused(true)
 		return
-	
-	if cmd.begins_with(":goto"):
-		var args = cmd.trim_prefix(':goto')
-		var goto = Goto.new()
-		goto.execute(globals, args)
-	
-	if cmd.begins_with(":find"):
-		var args = cmd.trim_prefix(':find')
-		var find = Find.new()
-		find.execute(globals, args)
-	
+
 	status_bar.display_error('Unknown command: "%s"' % [ cmd.trim_prefix(':') ])
 	set_paused(true)
 
