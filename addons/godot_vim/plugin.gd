@@ -88,6 +88,9 @@ func _load():
 	if script_editor_base == null:	return
 	
 	globals.editor_interface = editor_interface
+	globals.command_line = command_line
+	globals.status_bar = status_bar
+	globals.cursor = cursor
 	globals.script_editor = script_editor
 	globals.vim_plugin = self
 	script_editor_base.add_child(cursor)

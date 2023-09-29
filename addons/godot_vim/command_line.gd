@@ -4,7 +4,9 @@ const Cursor = preload("res://addons/godot_vim/cursor.gd")
 const StatusBar = preload("res://addons/godot_vim/status_bar.gd")
 const Constants= preload("res://addons/godot_vim/constants.gd")
 const Mode = Constants.Mode
-	
+
+const Marks = preload("res://addons/godot_vim/commands/marks.gd")
+
 var code_edit: CodeEdit
 var cursor: Cursor
 var status_bar: StatusBar
@@ -65,30 +67,8 @@ func handle_command(cmd: String):
 		return
 	
 	if cmd.begins_with(':marks'):
-		var marks: Dictionary = globals.get('marks', {})
-		if marks.is_empty():
-			status_bar.display_error("No marks set")
-			cursor.set_mode(Mode.NORMAL)
-			return
-		
-		var display_mark = func(key: String, m: Dictionary) -> String:
-			var pos: Vector2i = m.get('pos', Vector2i())
-			var file: String = m.get('file', '')
-			return "\n%s\t\t%s \t%s \t\t %s" % [key, pos.y, pos.x, file]
-		
-		var text: String = "[color=%s]List of all marks[/color]\nmark\tline\tcol \t file" % StatusBar.SPECIAL_COLOR
-		for key in marks.keys():
-			var unicode: int = key.unicode_at(0)
-			if (unicode < 65 or unicode > 90) and (unicode < 97 or unicode > 122):
-				continue
-			text += display_mark.call(key, marks[key])
-		for key in marks.keys():
-			var unicode: int = key.unicode_at(0)
-			if (unicode >= 65 and unicode <= 90) or (unicode >= 97 and unicode <= 122) or key == "-1":
-				continue
-			text += display_mark.call(key, marks[key])
-		
-		status_bar.display_text(text, TEXT_DIRECTION_LTR)
+		var marks = Marks.new()
+		marks.execute(globals)
 		set_paused(true)
 		return
 	
