@@ -32,9 +32,7 @@ class Cursor:
 		if mode == Mode.INSERT_MODE:
 			var old_time = Time.get_ticks_msec()
 			if Input.is_key_label_pressed(KEY_J):
-				print("j is pressed")
 				if Time.get_ticks_msec() - old_time < 500 and Input.is_key_label_pressed(KEY_K):
-					print("k is pressed too")
 					mode = Mode.NORMAL_MODE
 					code_edit.release_focus()
 					self.grab_focus()
