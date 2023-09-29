@@ -6,6 +6,7 @@ const Constants= preload("res://addons/godot_vim/constants.gd")
 const Mode = Constants.Mode
 
 const Marks = preload("res://addons/godot_vim/commands/marks.gd")
+const Goto = preload("res://addons/godot_vim/commands/goto.gd")
 const Find = preload("res://addons/godot_vim/commands/find.gd")
 
 var code_edit: CodeEdit
@@ -52,9 +53,8 @@ func handle_command(cmd: String):
 		return
 	
 	if cmd.trim_prefix(':').is_valid_int():
-		var line: int = cmd.trim_prefix(':').to_int()
-		cursor.set_caret_pos(line, 0)
-		cursor.set_mode(Mode.NORMAL)
+		var goto = Goto.new()
+		goto.execute(globals, cmd.trim_prefix(':'))
 		return
 	
 	if cmd.begins_with(':marks'):
@@ -62,6 +62,16 @@ func handle_command(cmd: String):
 		marks.execute(globals)
 		set_paused(true)
 		return
+	
+	if cmd.begins_with(":goto"):
+		var args = cmd.trim_prefix(':goto')
+		var goto = Goto.new()
+		goto.execute(globals, args)
+	
+	if cmd.begins_with(":find"):
+		var args = cmd.trim_prefix(':find')
+		var find = Find.new()
+		find.execute(globals, args)
 	
 	status_bar.display_error('Unknown command: "%s"' % [ cmd.trim_prefix(':') ])
 	set_paused(true)

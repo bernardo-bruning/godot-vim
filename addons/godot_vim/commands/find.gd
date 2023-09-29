@@ -1,12 +1,8 @@
-extends Node
-
 const Constants = preload("res://addons/godot_vim/constants.gd")
 const Mode = Constants.Mode
 
-func execute(api : Dictionary, cmd : String):
-	print("api: " + str(api))
-	print("cmd: " + str(cmd))
-	api.command_line.search_pattern = cmd.substr(1)
+func execute(api : Dictionary, args: String):
+	api.command_line.search_pattern = args.substr(1)
 	var rmatch: RegExMatch = api.vim_plugin.search_regex(
 		api.code_edit,
 		api.command_line.search_pattern,
