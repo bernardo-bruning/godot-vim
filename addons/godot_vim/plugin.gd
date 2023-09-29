@@ -90,6 +90,7 @@ func _load():
 	globals.editor_interface = editor_interface
 	globals.command_line = command_line
 	globals.status_bar = status_bar
+	globals.code_edit = code_edit
 	globals.cursor = cursor
 	globals.script_editor = script_editor
 	globals.vim_plugin = self

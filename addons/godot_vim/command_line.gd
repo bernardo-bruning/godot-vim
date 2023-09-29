@@ -6,6 +6,7 @@ const Constants= preload("res://addons/godot_vim/constants.gd")
 const Mode = Constants.Mode
 
 const Marks = preload("res://addons/godot_vim/commands/marks.gd")
+const Find = preload("res://addons/godot_vim/commands/find.gd")
 
 var code_edit: CodeEdit
 var cursor: Cursor
@@ -46,18 +47,8 @@ func _on_text_changed(cmd: String):
 
 func handle_command(cmd: String):
 	if cmd.begins_with('/'):
-		search_pattern = cmd.substr(1)
-		var rmatch: RegExMatch = globals.vim_plugin.search_regex(
-			code_edit,
-			search_pattern,
-			cursor.get_caret_pos() + Vector2i.RIGHT
-		)
-		if rmatch != null:
-			var pos: Vector2i = globals.vim_plugin.idx_to_pos(code_edit, rmatch.get_start())
-			cursor.set_caret_pos(pos.y, pos.x)
-		else:
-			status_bar.display_error('Pattern not found: "%s"' % [search_pattern])
-		cursor.set_mode(Mode.NORMAL)
+		var find = Find.new()
+		find.execute(globals, cmd)
 		return
 	
 	if cmd.trim_prefix(':').is_valid_int():
