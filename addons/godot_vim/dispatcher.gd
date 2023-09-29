@@ -12,7 +12,6 @@ func dispatch(command : String):
 	var command_idx_end = command.find(' ', 1)
 	if command_idx_end == -1: command_idx_end = command.length()
 	var handler_name = command.substr(1, command_idx_end-1)
-	print(handler_name)
 	if not handlers.has(handler_name):
 		return ERR_DOES_NOT_EXIST
 	
