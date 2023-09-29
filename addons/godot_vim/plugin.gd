@@ -69,10 +69,14 @@ class Cursor:
 				insert_mode()
 			if event.keycode == KEY_V:
 				mode = Mode.SELECTION_MODE
-			if event.keycode == KEY_O:
+			if event.keycode == KEY_O && not Input.is_key_pressed(KEY_SHIFT):
 				insert_mode()
 				code_edit.insert_line_at(get_line()+1, "")
 				move_line(+1)
+			if event.keycode == KEY_O && Input.is_key_pressed(KEY_SHIFT):
+				insert_mode()
+				code_edit.insert_line_at(get_line(), "")
+				move_line(-1)
 			if event.keycode == KEY_A:
 				insert_mode()
 				move_column(+1)
