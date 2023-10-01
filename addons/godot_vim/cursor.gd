@@ -35,26 +35,55 @@ func focus_entered():
 		code_edit.release_focus()
 		self.grab_focus()
 
-func _input(event):
+
+func reset_normal():
+	code_edit.cancel_code_completion()
+	input_stream = ''
+	set_mode(Mode.NORMAL)
+	selection_from = Vector2i.ZERO
+	selection_to = Vector2i.ZERO
+	set_column(code_edit.get_caret_column())
+	return
+
+
+func back_to_normal_mode(event, m):
+	var old_caret_pos = code_edit.get_caret_column()
 	if Input.is_key_pressed(KEY_ESCAPE):
-		code_edit.cancel_code_completion()
-		input_stream = ''
-		set_mode(Mode.NORMAL)
-		selection_from = Vector2i.ZERO
-		selection_to = Vector2i.ZERO
-		set_column(code_edit.get_caret_column())
-		return
-	draw_cursor()
+		if m == Mode.INSERT:
+			handle_input_stream('l')
+		reset_normal()	
+		return 1
+	if m == Mode.INSERT:
+			var old_time = Time.get_ticks_msec()
+			if Input.is_key_label_pressed(KEY_J):
+				old_caret_pos = code_edit.get_caret_column()
+				if Time.get_ticks_msec() - old_time < 700 and Input.is_key_label_pressed(KEY_K):
+					code_edit.backspace()
+					code_edit.cancel_code_completion()
+					reset_normal()	
+					handle_input_stream('l')
+					return 1
+	return 0
+
 	
+func _input(event):
+	if back_to_normal_mode(event, mode):	return
+	draw_cursor()
+	code_edit.cancel_code_completion()
 	if !has_focus():	return
 	if !event is InputEventKey:	return
 	if !event.pressed:	return
 	if mode == Mode.INSERT or mode == Mode.COMMAND:	return
+
 	if event.keycode == KEY_ESCAPE:
 		input_stream = ''
 		return
 	
-	var ch: String = char(event.unicode)
+
+	var ch: String
+	if !event is InputEventMouseMotion and !event is InputEventMouseButton:
+		ch = char(event.unicode)
+
 	if Input.is_key_pressed(KEY_ENTER):
 		ch = '<CR>'
 	if Input.is_key_pressed(KEY_TAB):
