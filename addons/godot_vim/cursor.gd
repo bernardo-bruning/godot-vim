@@ -117,7 +117,7 @@ func handle_input_stream(stream: String) -> String:
 		return ''
 	if stream == 'k':
 		move_line(-1)
-		return 'j'
+		return ''
 	if stream == 'l':
 		move_column(+1)
 		return ''
