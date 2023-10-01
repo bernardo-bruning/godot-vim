@@ -1,179 +1,109 @@
 @tool
 extends EditorPlugin
 
-enum Mode { NORMAL_MODE, INSERT_MODE, SELECTION_MODE };
+enum Mode { NORMAL, INSERT, VISUAL, VISUAL_LINE, COMMAND }
 
-class Cursor:
-	extends Control
-	var code_edit: CodeEdit
-	var mode: Mode = Mode.NORMAL_MODE
-	var caret: Vector2
-	var selection: PackedVector2Array
-	
-	func _init():
-		set_focus_mode(FOCUS_ALL)
+# Used for commands like "w" "b" and "e" respectively
+enum WordEdgeMode { WORD, BEGINNING, END }
 
-	func _ready():
-		code_edit.connect("focus_entered", focus_entered)
-		code_edit.connect("caret_changed", cursor_changed)
-	
-	func cursor_changed():
-		draw_cursor()
+const SPACES: String = " \t"
+const KEYWORDS: String = ".,\"'-=+!@#$%^&*()[]{}?~/\\<>:;"
+const DIGITS: String = "0123456789"
+const StatusBar = preload("res://addons/godot_vim/status_bar.gd")
+const CommandLine = preload("res://addons/godot_vim/command_line.gd")
+const Cursor = preload("res://addons/godot_vim/cursor.gd")
 
-	func focus_entered():
-		if mode == Mode.NORMAL_MODE:
-			code_edit.release_focus()
-			self.grab_focus()
-
-	func _unhandled_input(event):
-		pass
-
-	func _input(event):
-		if mode == Mode.INSERT_MODE:
-			var old_time = Time.get_ticks_msec()
-			if Input.is_key_label_pressed(KEY_J):
-				if Time.get_ticks_msec() - old_time < 500 and Input.is_key_label_pressed(KEY_K):
-					mode = Mode.NORMAL_MODE
-					code_edit.release_focus()
-					self.grab_focus()
-					code_edit.backspace()
-					return
-			draw_cursor()
-		if not has_focus():
-			return
-		if not event is InputEventKey:
-			return
-		if not event.pressed:
-			return
-		if mode == Mode.NORMAL_MODE or mode == Mode.SELECTION_MODE:
-			if event.keycode == KEY_D:
-				if mode == Mode.NORMAL_MODE:
-					var line = code_edit.get_line(code_edit.get_caret_line())
-					code_edit.select(code_edit.get_caret_line(), 0, code_edit.get_caret_line()+1, 0)
-				code_edit.copy()
-				code_edit.delete_selection()
-				move_column(0)
-				
-			if event.keycode == KEY_4 && Input.is_key_pressed(KEY_SHIFT):
-				set_column(code_edit.get_line(code_edit.get_selection_to_line()).length())
-			if event.keycode == KEY_G && Input.is_key_pressed(KEY_SHIFT):
-				set_line(code_edit.get_line_count())
-			elif event.keycode == KEY_G && not Input.is_key_pressed(KEY_SHIFT):
-				set_line(0)
-			if event.keycode == KEY_0:
-				set_column(0)
-			if event.keycode == KEY_H:
-				move_column(-1)
-			if event.keycode == KEY_J:
-				move_line(+1)
-			if event.keycode == KEY_K:
-				move_line(-1)
-			if event.keycode == KEY_L:
-				move_column(+1)
-			if event.keycode == KEY_I:
-				insert_mode()
-			if event.keycode == KEY_V:
-				mode = Mode.SELECTION_MODE
-			if event.keycode == KEY_O:
-				insert_mode()
-				code_edit.insert_line_at(get_line()+1, "")
-				move_line(+1)
-			if event.keycode == KEY_A:
-				insert_mode()
-				move_column(+1)
-			if event.keycode == KEY_W:
-				move_column(max(code_edit.get_word_under_caret().length(), 1))
-			if event.keycode == KEY_B:
-				move_column(-max(code_edit.get_word_under_caret().length(), 1))
-			if event.keycode == KEY_Y:
-				code_edit.copy()
-			if event.keycode == KEY_P:
-				code_edit.paste()
-			if event.keycode == KEY_C:
-				code_edit.delete_selection()
-				insert_mode()
-			if event.keycode == KEY_U:
-				code_edit.undo()
-			if event.keycode == KEY_R and Input.is_key_pressed(KEY_CTRL):
-				code_edit.redo()
-	
-	func insert_mode():
-		mode = Mode.INSERT_MODE
-		code_edit.call_deferred("grab_focus")
-	
-	func move_line(offset:int):
-		set_line(get_line() + offset)
-	
-	func get_line():
-		if mode == Mode.SELECTION_MODE:
-			return code_edit.get_selection_to_line()
-		return code_edit.get_caret_line()
-		
-	func set_line(position:int):
-		if mode == Mode.SELECTION_MODE:
-			code_edit.select(code_edit.get_selection_from_line(), code_edit.get_selection_from_column(), position, code_edit.get_selection_to_column())
-			return
-		code_edit.set_caret_line(min(position, code_edit.get_line_count()-1))
-		
-	func move_column(offset:int):
-		set_column(get_column()+offset)
-		
-	func get_column():
-		if mode == Mode.SELECTION_MODE:
-			return code_edit.get_selection_to_column()
-		return code_edit.get_caret_column()
-		
-	func set_column(position):
-		if mode == Mode.SELECTION_MODE:
-			code_edit.select(code_edit.get_selection_from_line(), code_edit.get_selection_from_column(), code_edit.get_selection_to_line(), position)
-			return
-		var line = code_edit.get_line(code_edit.get_caret_line())
-		code_edit.set_caret_column(min(line.length(), position))
-	
-	func draw_cursor():
-		if mode == Mode.SELECTION_MODE:
-			return
-			
-		if mode == Mode.INSERT_MODE:
-			if code_edit.has_selection():
-				code_edit.deselect()
-			return
-		
-		var line = code_edit.get_line(code_edit.get_caret_line())
-		var length = line.length()
-		if mode == Mode.NORMAL_MODE:
-			length = length - 1
-		var column = min(code_edit.get_caret_column(), length)
-		
-		code_edit.select(code_edit.get_caret_line(), column, code_edit.get_caret_line(), column+1)
-
-var cursor
+var cursor: Cursor
+var command_line: CommandLine
+var status_bar: StatusBar
+var globals: Dictionary = {}
 
 func _enter_tree():
+	globals = {}
+	
 	if get_code_edit() != null:
 		_load()
 	get_editor_interface().get_script_editor().connect("editor_script_changed", _script_changed)
 
-func _script_changed(_script):
+func _script_changed(script: Script):
+	# Add to recent files
+	var path: String = script.resource_path
+	var marks: Dictionary = globals.get('marks', {})
+	for i in range(9, -1, -1):
+		var m: String = str(i)
+		var pm: String = str(i - 1)
+		if !marks.has(pm):
+			continue
+		marks[m] = marks[pm]
+	marks['-1'] = { 'file' : path, 'pos' : Vector2i(-1, 0) }
+	
 	_load()
 
+
+func edit_script(path: String, pos: Vector2i):
+	var script = load(path)
+	var editor_interface: EditorInterface = globals.editor_interface
+	if script == null:
+		status_bar.display_error('Could not open file "%s"' % path)
+		return ''
+	editor_interface.edit_script(script)
+	cursor.call_deferred('set_caret_pos', pos.y, pos.x)
+
+
 func _load():
+	if globals == null:
+		globals = {}
+	
+	# Cursor
 	if cursor != null:
 		cursor.queue_free()
 	cursor = Cursor.new()
 	var code_edit = get_code_edit()
-	var caret = code_edit.get_caret_line()
 	code_edit.select(code_edit.get_caret_line(), code_edit.get_caret_column(), code_edit.get_caret_line(), code_edit.get_caret_column()+1)
 	cursor.code_edit = code_edit
-	if get_editor_interface().get_script_editor().get_current_editor() != null:
-		get_editor_interface().get_script_editor().get_current_editor().add_child(cursor)
+	cursor.globals = globals
 	
+	# Command line
+	if command_line != null:
+		command_line.queue_free()
+	command_line = CommandLine.new()
+	command_line.code_edit = code_edit
+	cursor.command_line = command_line
+	command_line.cursor = cursor
+	command_line.globals = globals
+	command_line.hide()
+	
+	# Status bar
+	if status_bar != null:
+		status_bar.queue_free()
+	status_bar = StatusBar.new()
+	cursor.status_bar = status_bar
+	command_line.status_bar = status_bar
+	
+	var editor_interface = get_editor_interface()
+	if editor_interface == null:	return
+	var script_editor = editor_interface.get_script_editor()
+	if script_editor == null:	return
+	var script_editor_base = script_editor.get_current_editor()
+	if script_editor_base == null:	return
+	
+	globals.editor_interface = editor_interface
+	globals.command_line = command_line
+	globals.status_bar = status_bar
+	globals.code_edit = code_edit
+	globals.cursor = cursor
+	globals.script_editor = script_editor
+	globals.vim_plugin = self
+	script_editor_base.add_child(cursor)
+	script_editor_base.add_child(status_bar)
+	script_editor_base.add_child(command_line)
+
 
 func get_code_edit():
-	var editor = get_editor_interface().get_script_editor().get_current_editor();
+	var editor = get_editor_interface().get_script_editor().get_current_editor()
 	return _select(editor, ['VSplitContainer', 'CodeTextEditor', 'CodeEdit'])
 
-func _select(obj, types):
+func _select(obj: Node, types: Array[String]): # ???
 	for type in types:
 		for child in obj.get_children():
 			if child.is_class(type):
@@ -184,4 +114,51 @@ func _select(obj, types):
 func _exit_tree():
 	if cursor != null:
 		cursor.queue_free()
-	pass
+	if command_line != null:
+		command_line.queue_free()
+	if status_bar != null:
+		status_bar.queue_free()
+
+
+# -------------------------------------------------------------
+# ** UTIL **
+# -------------------------------------------------------------
+
+func search_regex(text_edit: TextEdit, pattern: String, from_pos: Vector2i) -> RegExMatch:
+	var regex: RegEx = RegEx.new()
+	var err: int = regex.compile(pattern)
+	var idx: int = pos_to_idx(text_edit, from_pos)
+	var res: RegExMatch = regex.search(text_edit.text, idx)
+	if res == null:
+		return regex.search(text_edit.text, 0)
+	return res
+
+func search_regex_backwards(text_edit: TextEdit, pattern: String, from_pos: Vector2i) -> RegExMatch:
+	var regex: RegEx = RegEx.new()
+	var err: int = regex.compile(pattern)
+	var idx: int = pos_to_idx(text_edit, from_pos)
+	# We use pop_back() so it doesn't print an error
+	var res: RegExMatch = regex.search_all(text_edit.text, 0, idx).pop_back()
+	if res ==  null:
+		return regex.search_all(text_edit.text).pop_back()
+	return res
+
+func pos_to_idx(text_edit: TextEdit, pos: Vector2i) -> int:
+	text_edit.select(0, 0, pos.y, pos.x)
+	var len: int = text_edit.get_selected_text().length()
+	text_edit.deselect()
+	return len
+
+func idx_to_pos(text_edit: TextEdit, idx: int) -> Vector2i:
+	var line: int = text_edit.text .count('\n', 0, idx)
+	var col: int = idx - text_edit.text .rfind('\n', idx) - 1
+	return Vector2i(col, line)
+
+func get_first_non_digit_idx(str: String) -> int:
+	if str.is_empty():	return -1
+	if str[0] == '0':	return 0 # '0...' is an exception
+	for i in str.length():
+		if !DIGITS.contains(str[i]):
+			return i
+	return -1 # All digits
+
