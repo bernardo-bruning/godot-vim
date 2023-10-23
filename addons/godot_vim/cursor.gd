@@ -46,30 +46,41 @@ func reset_normal():
 	return
 
 
-func back_to_normal_mode(event, m):
+# I changed it from returning int to bool. I hope that's okay
+func back_to_normal_mode(event: InputEvent, m: Mode) -> bool:
 	var old_caret_pos = code_edit.get_caret_column()
+	
+	# Esc
 	if Input.is_key_pressed(KEY_ESCAPE):
 		if m == Mode.INSERT:
 			handle_input_stream('l')
-		reset_normal()	
-		return 1
+		reset_normal()
+		return true
+	
+	# jk
 	if m == Mode.INSERT:
-			var old_time = Time.get_ticks_msec()
-			if Input.is_key_label_pressed(KEY_J):
-				old_caret_pos = code_edit.get_caret_column()
-				if Time.get_ticks_msec() - old_time < 700 and Input.is_key_label_pressed(KEY_K):
-					code_edit.backspace()
-					code_edit.cancel_code_completion()
-					reset_normal()	
-					handle_input_stream('l')
-					return 1
-	return 0
+		var old_time = Time.get_ticks_msec()
+		if !Input.is_key_label_pressed(KEY_J):
+			return false
+		
+		old_caret_pos = code_edit.get_caret_column()
+		if !Time.get_ticks_msec() - old_time < 700 or !Input.is_key_label_pressed(KEY_K):
+			return false
+		
+		code_edit.backspace()
+		code_edit.cancel_code_completion()
+		reset_normal()	
+		handle_input_stream('l')
+		return true
+	return false
 
 	
 func _input(event):
-	if back_to_normal_mode(event, mode):	return
+	if back_to_normal_mode(event, mode):
+		code_edit.cancel_code_completion()
+		return
+	
 	draw_cursor()
-	code_edit.cancel_code_completion()
 	if !has_focus():	return
 	if !event is InputEventKey:	return
 	if !event.pressed:	return
@@ -79,7 +90,6 @@ func _input(event):
 		input_stream = ''
 		return
 	
-
 	var ch: String
 	if !event is InputEventMouseMotion and !event is InputEventMouseButton:
 		ch = char(event.unicode)
