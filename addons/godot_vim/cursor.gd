@@ -234,6 +234,16 @@ func handle_input_stream(stream: String) -> String:
 			globals.last_command = stream
 		return ''
 	
+	if stream == 'x':
+		code_edit.copy()
+		code_edit.delete_selection()
+		globals.last_command = stream
+		return ''
+	if stream.begins_with('s'):
+		code_edit.cut()
+		set_mode(Mode.INSERT)
+		return ''
+	
 	# HANDLE VISUAL MODE
 	if mode == Mode.VISUAL: # TODO make it work for visual line too
 		var range: Array = calc_double_motion_region(selection_to, stream)
@@ -337,16 +347,7 @@ func handle_input_stream(stream: String) -> String:
 		set_mode(Mode.INSERT)
 		globals.last_command = stream
 		return ''
-	
-	if stream == 'x':
-		code_edit.copy()
-		code_edit.delete_selection()
-		globals.last_command = stream
-		return ''
-	if stream.begins_with('s'):
-		code_edit.cut()
-		set_mode(Mode.INSERT)
-		return ''
+		
 	if stream == 'u':
 		code_edit.undo()
 		set_mode(Mode.NORMAL)
@@ -520,7 +521,11 @@ func get_word_edge_pos(from_line: int, from_col: int, delims: String, mode: Word
 		col = (text.length() - 1) * int(search_dir < 0 and char_offset < 0)
 	return Vector2i(from_col, from_line)
 
+# Get the 'edge' or a paragraph (like with { or } motions)
+# search_dir: are we searching up (-1) or down (1)?
 func get_paragraph_edge_pos(from_line: int, search_dir: int):
+	assert(search_dir == -1 or search_dir == 1)
+	
 	var line: int = from_line
 	var prev_empty: bool = code_edit.get_line(line) .strip_edges().is_empty()
 	line += search_dir
@@ -533,6 +538,8 @@ func get_paragraph_edge_pos(from_line: int, search_dir: int):
 	return Vector2i(0, line)
 
 # motion: command like "f", "t", "F", or "T"
+# in_line: the line to search in
+# motion: f, t, F, or T
 func find_char_motion(in_line: int, from_col: int, motion: String, char: String) -> int:
 	var search_dir: int = 1 if is_lowercase(motion) else -1
 	var offset: int = int(motion == 'T') - int(motion == 't') # 1 if T,  -1 if t,  0 otherwise
@@ -572,15 +579,26 @@ func calc_double_motion_region(from_pos: Vector2i, stream: String, from_char: in
 		var p0: Vector2i = Vector2i(code_edit.get_first_non_whitespace_column(from_pos.y), from_pos.y)
 		return [p0, from_pos + Vector2i.LEFT]
 	
-	# DOUBLE MOTIONS
-	if secondary == '':
-		return [from_pos] # Incomplete
+	if primary == '{':
+		var p0: Vector2i = get_paragraph_edge_pos(from_pos.y, -1) + Vector2i.DOWN
+		return [ p0, from_pos ]
+	if primary == '}':
+		var p1: Vector2i = get_paragraph_edge_pos(from_pos.y, 1)
+		return [ from_pos, p1 ]
 	
+	
+	# DOUBLE MOTIONS
+	# TODO make it work for 'a' too (eg 'daw' 'vap')
+	if secondary == '':
+		return [from_pos] # Return one element to signal that it's incomplete
+	
+	# iw, iW
 	if primary == 'i' and secondary.to_lower() == 'w':
 		var p0: Vector2i = get_word_edge_pos(from_pos.y, from_pos.x + 1, '' if secondary == 'W' else KEYWORDS, WordEdgeMode.BEGINNING)
 		var p1: Vector2i = get_word_edge_pos(from_pos.y, from_pos.x - 1, '' if secondary == 'W' else KEYWORDS, WordEdgeMode.END)
 		return [ p0, p1 ]
 	
+	# ip
 	if primary == 'i' and secondary == 'p':
 		var p0: Vector2i = get_paragraph_edge_pos(from_pos.y + 1, -1) + Vector2i.DOWN
 		var p1: Vector2i = get_paragraph_edge_pos(from_pos.y - 1, 1)
@@ -589,12 +607,13 @@ func calc_double_motion_region(from_pos: Vector2i, stream: String, from_char: in
 	# In-line search for `secondary`
 	if primary.to_lower() == 'f' or primary.to_lower() == 't':
 		globals.last_search = primary + secondary
-		
 		var col: int = find_char_motion(get_line(), get_column(), primary, secondary)
 		if col == -1:	return []
-		if is_lowercase(primary):
+		
+		# Reverse range if searching backwards
+		if is_lowercase(primary): # f or t
 			return [ from_pos, Vector2i(col, from_pos.y) ]
-		else:
+		else: # F or T
 			return [ Vector2i(col, from_pos.y), from_pos ]
 	
 	return [] # Unknown combination
@@ -617,7 +636,7 @@ func set_mode(m: int):
 	command_line.close()
 	match mode:
 		Mode.NORMAL:
-			code_edit.remove_secondary_carets()
+			code_edit.remove_secondary_carets() # Secondary carets are used when searching with '/' (See command_line.gd)
 			code_edit.deselect()
 			code_edit.release_focus()
 			code_edit.deselect()
@@ -625,27 +644,32 @@ func set_mode(m: int):
 			status_bar.set_mode_text(Mode.NORMAL)
 			if old_mode == Mode.INSERT:
 				move_column(-1)
+		
 		Mode.VISUAL:
 			if old_mode != Mode.VISUAL_LINE:
 				selection_from = Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
 				selection_to = Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
 			set_caret_pos(selection_to.y, selection_to.x)
 			status_bar.set_mode_text(Mode.VISUAL)
+		
 		Mode.VISUAL_LINE:
 			if old_mode != Mode.VISUAL:
 				selection_from = Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
 				selection_to = Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
 			set_caret_pos(selection_to.y, selection_to.x)
 			status_bar.set_mode_text(Mode.VISUAL_LINE)
+		
 		Mode.COMMAND:
 			command_line.show()
 			command_line.call_deferred("grab_focus")
 			status_bar.set_mode_text(Mode.COMMAND)
+		
 		Mode.INSERT:
 			code_edit.call_deferred("grab_focus")
 			status_bar.set_mode_text(Mode.INSERT)
+		
 		_:
-			pass
+			push_error("[vim::cursor::set_mode()] Unknown mode %s" % mode)
 
 func move_line(offset:int):
 	set_line(get_line() + offset)

@@ -35,6 +35,8 @@ func set_command(cmd: String):
 
 func _on_text_changed(cmd: String):
 	if !cmd.begins_with('/'):	return
+	
+	# Update search
 	var pattern: String = cmd.substr(1)
 	var rmatch: RegExMatch = globals.vim_plugin.search_regex(
 		code_edit,
@@ -44,6 +46,7 @@ func _on_text_changed(cmd: String):
 	if rmatch == null:
 		code_edit.remove_secondary_carets()
 		return
+	
 	var pos: Vector2i = globals.vim_plugin.idx_to_pos(code_edit, rmatch.get_start())
 	if code_edit.get_caret_count() < 2:
 		code_edit.add_caret(pos.y, pos.x)
@@ -73,6 +76,7 @@ func close():
 	clear()
 	set_paused(false)
 
+# Wait for user input
 func set_paused(paused: bool):
 	is_paused = paused
 	text = "Press ENTER to continue" if is_paused else ""
