@@ -46,14 +46,11 @@ func reset_normal():
 	return
 
 
-# I changed it from returning int to bool. I hope that's okay
 func back_to_normal_mode(event: InputEvent, m: Mode) -> bool:
-	var old_caret_pos = code_edit.get_caret_column()
+	var old_caret_col: int = code_edit.get_caret_column()
 	
 	# Esc
 	if Input.is_key_pressed(KEY_ESCAPE):
-		if m == Mode.INSERT:
-			handle_input_stream('l')
 		reset_normal()
 		return true
 	
@@ -63,7 +60,7 @@ func back_to_normal_mode(event: InputEvent, m: Mode) -> bool:
 		if !Input.is_key_label_pressed(KEY_J):
 			return false
 		
-		old_caret_pos = code_edit.get_caret_column()
+		old_caret_col = code_edit.get_caret_column()
 		if !Time.get_ticks_msec() - old_time < 700 or !Input.is_key_label_pressed(KEY_K):
 			return false
 		
@@ -192,6 +189,51 @@ func handle_input_stream(stream: String) -> String:
 			globals.last_command = stream
 		return ''
 	
+	if stream.begins_with('p'):
+		code_edit.begin_complex_operation()
+		if is_mode_visual(mode):
+			code_edit.delete_selection()
+		if DisplayServer.clipboard_get().begins_with('\r\n'):
+			set_column(get_line_length())
+		else:
+			move_column(+1)
+		code_edit.deselect()
+		code_edit.paste()
+		move_column(-1)
+		code_edit.end_complex_operation()
+		set_mode(Mode.NORMAL)
+		globals.last_command = stream
+		return ''
+	
+	if stream.begins_with('c'):
+		if mode == Mode.VISUAL:
+			code_edit.cut()
+			set_mode(Mode.INSERT)
+			return ''
+		
+		if stream.begins_with('cc') and mode == Mode.NORMAL:
+			code_edit.begin_complex_operation()
+			var l: int = get_line()
+			var ind: int = code_edit.get_first_non_whitespace_column(l)
+			code_edit.select( l-1, get_line_length(l-1), l, get_line_length(l) )
+			code_edit.cut()
+			code_edit.insert_line_at(get_line()+1, "\t".repeat(ind))
+			code_edit.end_complex_operation()
+			move_line(+1)
+			set_mode(Mode.INSERT)
+			globals.last_command = stream
+			return ''
+		
+		var range: Array = calc_double_motion_region(get_caret_pos(), stream, 1)
+		if range.size() == 0:	return ''
+		if range.size() == 1:	return stream
+		if range.size() == 2:
+			code_edit.select(range[0].y, range[0].x, range[1].y, range[1].x + 1)
+			code_edit.cut()
+			set_mode(Mode.INSERT)
+			globals.last_command = stream
+		return ''
+	
 	# HANDLE VISUAL MODE
 	if mode == Mode.VISUAL: # TODO make it work for visual line too
 		var range: Array = calc_double_motion_region(selection_to, stream)
@@ -214,21 +256,6 @@ func handle_input_stream(stream: String) -> String:
 	if mode == Mode.NORMAL and stream.begins_with('D'):
 		code_edit.select( get_line(), code_edit.get_caret_column(), get_line(), get_line_length() )
 		code_edit.cut()
-		globals.last_command = stream
-		return ''
-	if stream.begins_with('p'):
-		code_edit.begin_complex_operation()
-		if is_mode_visual(mode):
-			code_edit.delete_selection()
-		if DisplayServer.clipboard_get().begins_with('\r\n'):
-			set_column(get_line_length())
-		else:
-			move_column(+1)
-		code_edit.deselect()
-		code_edit.paste()
-		move_column(-1)
-		code_edit.end_complex_operation()
-		set_mode(Mode.NORMAL)
 		globals.last_command = stream
 		return ''
 	if stream.begins_with('P'):
@@ -398,34 +425,6 @@ func handle_input_stream(stream: String) -> String:
 			set_caret_pos(pos.y, pos.x)
 		return ''
 	
-	if stream.begins_with('c'):
-		if mode == Mode.VISUAL:
-			code_edit.cut()
-			set_mode(Mode.INSERT)
-			return ''
-		
-		if stream.begins_with('cc') and mode == Mode.NORMAL:
-			code_edit.begin_complex_operation()
-			var l: int = get_line()
-			var ind: int = code_edit.get_first_non_whitespace_column(l)
-			code_edit.select( l-1, get_line_length(l-1), l, get_line_length(l) )
-			code_edit.cut()
-			code_edit.insert_line_at(get_line()+1, "\t".repeat(ind))
-			code_edit.end_complex_operation()
-			move_line(+1)
-			set_mode(Mode.INSERT)
-			globals.last_command = stream
-			return ''
-		
-		var range: Array = calc_double_motion_region(get_caret_pos(), stream, 1)
-		if range.size() == 0:	return ''
-		if range.size() == 1:	return stream
-		if range.size() == 2:
-			code_edit.select(range[0].y, range[0].x, range[1].y, range[1].x + 1)
-			code_edit.cut()
-			set_mode(Mode.INSERT)
-			globals.last_command = stream
-		return ''
 	if mode == Mode.NORMAL and stream.begins_with('C'):
 		code_edit.select( get_line(), code_edit.get_caret_column(), get_line(), get_line_length() )
 		code_edit.cut()
