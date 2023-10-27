@@ -167,23 +167,6 @@ func handle_input_stream(stream: String) -> String:
 			set_column(col)
 		return ''
 	
-	if mode == Mode.VISUAL: # TODO make it work for visual line too
-		var range: Array = calc_double_motion_region(selection_to, stream)
-		if range.size() == 1:	return stream
-		if range.size() == 2:
-			selection_from = range[0]
-			selection_to = range[1]
-			update_visual_selection()
-	
-	if stream.begins_with('J') and mode == Mode.NORMAL:
-		code_edit.begin_complex_operation()
-		code_edit.select( get_line(), get_line_length(), get_line()+1, code_edit.get_first_non_whitespace_column(get_line()+1) )
-		code_edit.delete_selection()
-		code_edit.deselect()
-		code_edit.insert_text_at_caret(' ')
-		code_edit.end_complex_operation()
-		globals.last_command = stream
-		return ''
 	if stream.begins_with('d'):
 		if is_mode_visual(mode):
 			DisplayServer.clipboard_set( '\r' + code_edit.get_selected_text() )
@@ -207,6 +190,25 @@ func handle_input_stream(stream: String) -> String:
 			code_edit.select(range[0].y, range[0].x, range[1].y, range[1].x + 1)
 			code_edit.cut()
 			globals.last_command = stream
+		return ''
+	
+	# HANDLE VISUAL MODE
+	if mode == Mode.VISUAL: # TODO make it work for visual line too
+		var range: Array = calc_double_motion_region(selection_to, stream)
+		if range.size() == 1:	return stream
+		if range.size() == 2:
+			selection_from = range[0]
+			selection_to = range[1]
+			update_visual_selection()
+	
+	if stream.begins_with('J') and mode == Mode.NORMAL:
+		code_edit.begin_complex_operation()
+		code_edit.select( get_line(), get_line_length(), get_line()+1, code_edit.get_first_non_whitespace_column(get_line()+1) )
+		code_edit.delete_selection()
+		code_edit.deselect()
+		code_edit.insert_text_at_caret(' ')
+		code_edit.end_complex_operation()
+		globals.last_command = stream
 		return ''
 	
 	if mode == Mode.NORMAL and stream.begins_with('D'):
@@ -553,6 +555,7 @@ func calc_double_motion_region(from_pos: Vector2i, stream: String, from_char: in
 	if primary == '':
 		return [from_pos] # Incomplete
 	
+	# SINGLE MOTIONS
 	if primary.to_lower() == 'w':
 		var p1: Vector2i = get_word_edge_pos(from_pos.y, from_pos.x, '' if primary == 'W' else KEYWORDS, WordEdgeMode.WORD)
 		return [from_pos, p1 + Vector2i.LEFT]
@@ -570,8 +573,7 @@ func calc_double_motion_region(from_pos: Vector2i, stream: String, from_char: in
 		var p0: Vector2i = Vector2i(code_edit.get_first_non_whitespace_column(from_pos.y), from_pos.y)
 		return [p0, from_pos + Vector2i.LEFT]
 	
-	if primary != 'i' and primary != 'a':
-		return [] # Invalid
+	# DOUBLE MOTIONS
 	if secondary == '':
 		return [from_pos] # Incomplete
 	
@@ -584,6 +586,17 @@ func calc_double_motion_region(from_pos: Vector2i, stream: String, from_char: in
 		var p0: Vector2i = get_paragraph_edge_pos(from_pos.y + 1, -1) + Vector2i.DOWN
 		var p1: Vector2i = get_paragraph_edge_pos(from_pos.y - 1, 1)
 		return [ p0, p1 ]
+	
+	# In-line search for `secondary`
+	if primary.to_lower() == 'f' or primary.to_lower() == 't':
+		globals.last_search = primary + secondary
+		
+		var col: int = find_char_motion(get_line(), get_column(), primary, secondary)
+		if col == -1:	return []
+		if is_lowercase(primary):
+			return [ from_pos, Vector2i(col, from_pos.y) ]
+		else:
+			return [ Vector2i(col, from_pos.y), from_pos ]
 	
 	return [] # Unknown combination
 
