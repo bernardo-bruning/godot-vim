@@ -3,7 +3,9 @@ extends Object
 var handlers = {
 	"goto": preload("res://addons/godot_vim/commands/goto.gd"),
 	"find": preload("res://addons/godot_vim/commands/find.gd"),
-	"marks": preload("res://addons/godot_vim/commands/marks.gd")
+	"marks": preload("res://addons/godot_vim/commands/marks.gd"),
+	"moveline": preload("res://addons/godot_vim/commands/moveline.gd"),
+	"movecolumn": preload("res://addons/godot_vim/commands/movecolumn.gd"),
 }
 
 var globals
