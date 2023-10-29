@@ -162,3 +162,12 @@ func get_first_non_digit_idx(str: String) -> int:
 			return i
 	return -1 # All digits
 
+
+## Repeat the function `f` and accumulate the result. A bit like Array::reduce()
+## f: func(T) -> T  where T is the previous output
+func repeat_accum(count: int, inital_value: Variant, f: Callable) -> Variant:
+	var value: Variant = inital_value
+	for __ in count:
+		value = f.call(value)
+	return value
+

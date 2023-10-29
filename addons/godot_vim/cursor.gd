@@ -554,22 +554,38 @@ func find_char_motion(in_line: int, from_col: int, motion: String, char: String)
 		return -1
 	return col + offset
 
-# returns: [ Vector2i from_pos, Vector2i to_pos ]
-func calc_double_motion_region(from_pos: Vector2i, stream: String, from_char: int = 0) -> Array[Vector2i]:
-	var primary: String = get_stream_char(stream, from_char)
-	var secondary: String = get_stream_char(stream, from_char + 1)
+## Currently supports:
+##    wW, bB, eE, ^, $, {, }, fF, tT
+##    iw and iW, ip
+##    repeating motions (e.g. 2w, 4} )
+## returns: [ Vector2i from_pos, Vector2i to_pos ]
+func calc_double_motion_region(from_pos: Vector2i, stream: String, from_idx: int = 0) -> Array[Vector2i]:
+	var num: int = stream.to_int()
+	if num > 0: # if the motion is repeated (e.g. d2w, y4E), then offset
+		from_idx += str(num).length()
+	var primary: String = get_stream_char(stream, from_idx)
+	
 	if primary == '':
 		return [from_pos] # Incomplete
 	
+	var repeat: Callable = globals.vim_plugin.repeat_accum
+	var count: int = maxi(num, 1) # `num` can be 0 if no number was specified (e.g. d$, viW). In that case, default to 1
+	
 	# SINGLE MOTIONS
 	if primary.to_lower() == 'w':
-		var p1: Vector2i = get_word_edge_pos(from_pos.y, from_pos.x, '' if primary == 'W' else KEYWORDS, WordEdgeMode.WORD)
+		var p1: Vector2i = repeat.call(count, from_pos,
+			func(pos: Vector2i):	return get_word_edge_pos(pos.y, pos.x, '' if primary == 'W' else KEYWORDS, WordEdgeMode.WORD)
+			)
 		return [from_pos, p1 + Vector2i.LEFT]
 	if primary.to_lower() == 'b':
-		var p0: Vector2i = get_word_edge_pos(from_pos.y, from_pos.x, '' if primary == 'B' else KEYWORDS, WordEdgeMode.BEGINNING)
+		var p0: Vector2i = repeat.call(count, from_pos,
+			func(pos: Vector2i):	return get_word_edge_pos(pos.y, pos.x, '' if primary == 'B' else KEYWORDS, WordEdgeMode.BEGINNING)
+			)
 		return [p0, from_pos + Vector2i.LEFT]
 	if primary.to_lower() == 'e':
-		var p1: Vector2i = get_word_edge_pos(from_pos.y, from_pos.x, '' if primary == 'E' else KEYWORDS, WordEdgeMode.END)
+		var p1: Vector2i = repeat.call(count, from_pos,
+			func(pos: Vector2i):	return get_word_edge_pos(pos.y, pos.x, '' if primary == 'E' else KEYWORDS, WordEdgeMode.END)
+			)
 		return [from_pos, p1]
 	
 	if primary == '$':
@@ -580,16 +596,20 @@ func calc_double_motion_region(from_pos: Vector2i, stream: String, from_char: in
 		return [p0, from_pos + Vector2i.LEFT]
 	
 	if primary == '{':
-		var p0: Vector2i = get_paragraph_edge_pos(from_pos.y, -1) + Vector2i.DOWN
+		var p0: Vector2i = repeat.call(count, from_pos,
+			func(pos: Vector2i):	return get_paragraph_edge_pos(pos.y, -1)
+			)
 		return [ p0, from_pos ]
 	if primary == '}':
-		var p1: Vector2i = get_paragraph_edge_pos(from_pos.y, 1)
+		var p1: Vector2i = repeat.call(count, from_pos,
+			func(pos: Vector2i):	return get_paragraph_edge_pos(pos.y, 1)
+			)
 		return [ from_pos, p1 ]
-	
 	
 	# DOUBLE MOTIONS
 	# TODO make it work for 'a' too (eg 'daw' 'vap')
-	if secondary == '':
+	var secondary: String = get_stream_char(stream, from_idx + 1)
+	if secondary == '' or num > 0: # Double motions don't repeat
 		return [from_pos] # Return one element to signal that it's incomplete
 	
 	# iw, iW
