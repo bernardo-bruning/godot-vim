@@ -12,11 +12,13 @@ const DIGITS: String = "0123456789"
 const StatusBar = preload("res://addons/godot_vim/status_bar.gd")
 const CommandLine = preload("res://addons/godot_vim/command_line.gd")
 const Cursor = preload("res://addons/godot_vim/cursor.gd")
+const Dispatcher = preload("res://addons/godot_vim/dispatcher.gd")
 
 var cursor: Cursor
 var command_line: CommandLine
 var status_bar: StatusBar
 var globals: Dictionary = {}
+var dispatcher: Dispatcher
 
 func _enter_tree():
 	globals = {}
@@ -97,7 +99,12 @@ func _load():
 	script_editor_base.add_child(cursor)
 	script_editor_base.add_child(status_bar)
 	script_editor_base.add_child(command_line)
+	
+	dispatcher = Dispatcher.new()
+	dispatcher.globals = globals
 
+func dispatch(command: String):
+	return dispatcher.dispatch(command)
 
 func get_code_edit():
 	var editor = get_editor_interface().get_script_editor().get_current_editor()
