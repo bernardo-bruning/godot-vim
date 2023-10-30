@@ -3,7 +3,6 @@ extends LineEdit
 const Cursor = preload("res://addons/godot_vim/cursor.gd")
 const StatusBar = preload("res://addons/godot_vim/status_bar.gd")
 const Constants = preload("res://addons/godot_vim/constants.gd")
-const Dispatcher = preload("res://addons/godot_vim/dispatcher.gd")
 const Mode = Constants.Mode
 
 const Marks = preload("res://addons/godot_vim/commands/marks.gd")
@@ -14,14 +13,11 @@ var code_edit: CodeEdit
 var cursor: Cursor
 var status_bar: StatusBar
 var globals: Dictionary
-var dispatcher: Dispatcher
 
 var is_paused: bool = false
 var search_pattern: String = ''
 
 func _ready():
-	dispatcher = Dispatcher.new()
-	dispatcher.globals = globals
 	placeholder_text = "Enter command..."
 	show()
 	
@@ -64,7 +60,7 @@ func handle_command(cmd: String):
 		goto.execute(globals, cmd.trim_prefix(':'))
 		return
 	
-	if dispatcher.dispatch(cmd) == OK:
+	if globals.vim_plugin.dispatch(cmd) == OK:
 		set_paused(true)
 		return
 
