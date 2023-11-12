@@ -76,7 +76,7 @@ func back_to_normal_mode(event: InputEvent, m: Mode) -> bool:
 		return true
 	return false
 
-	
+
 func _input(event):
 	if back_to_normal_mode(event, mode):
 		code_edit.cancel_code_completion()
@@ -92,57 +92,151 @@ func _input(event):
 		key_map.clear()
 		return
 	
-	var cmds: Array = key_map.register_event(event)
+	# See KeyMap.key_map, KeyMap.register_event()
+	var cmd: Dictionary = key_map.register_event(event, mode)
 	status_bar.display_text(key_map.get_input_stream_as_string())
-	if cmds.is_empty():	return # Await further input
+	if cmd.is_empty():	return # Await further input
 	
-	for cmd in cmds:
-		# `if else` is faster than `match` (somehow)
-		if cmd.type == KeyMap.CmdType.Motion:
-			handle_motion(cmd)
+	# `if else` is faster than `match` (especially with small sets)
+	if cmd.type == KeyMap.Motion:
+		var pos: Vector2i = handle_motion(cmd.motion)
+		set_caret_pos(pos.y, pos.x)
+		return
+	if cmd.type == KeyMap.Action and mode == Mode.NORMAL:
+		handle_action(cmd.action)
+		return
+	if cmd.type == KeyMap.Operator:
+		handle_operator(cmd.operator)
+		return
+	if cmd.type == KeyMap.OperatorMotion:
+		handle_operator_motion(cmd.operator, cmd.motion)
+		return
+
+
+# See KeyMap.key_map where type == Motion, KeyMap.register_event()
+func handle_motion(motion: Dictionary) -> Vector2i:
+	if !motion.has("type"):
+		return get_caret_pos()
+	
+	match motion.type:
+		KeyMap.MotionType.MoveByChars:
+			return Vector2i(get_column() + motion.move_by, get_line())
+		KeyMap.MotionType.MoveByLines:
+			return Vector2i(get_column(), get_line() + motion.move_by)
 		
+		KeyMap.MotionType.MoveByWord:
+			return get_word_edge_pos(
+				get_line(),
+				get_column(),
+				motion.get("forward", true),
+				motion.get("word_end", false),
+				motion.get("big_word", false)
+			)
+		
+		KeyMap.MotionType.StartOfLine:
+			return Vector2i(0, get_line())
+		KeyMap.MotionType.EndOfLine:
+			return Vector2(get_line_length() - int(!motion.get("inclusive", false)), get_line())
+		KeyMap.MotionType.FirstNonWhitespaceChar:
+			return Vector2i(code_edit.get_first_non_whitespace_column(get_line()), get_line())
+		
+		var t:
+			push_warning("Unknown motion: %s", t)
+			return get_caret_pos()
+
+
+# See KeyMap.key_map where type == Action, KeyMap.register_event()
+func handle_action(action: Dictionary):
+	match action.type:
+		KeyMap.ActionType.Insert:
+			set_mode(Mode.INSERT)
+			var offset: String = action.get("offset", "in_place")
+			
+			if offset == "after":
+				move_column(1)
+			elif offset == "bol":
+				set_column( code_edit.get_first_non_whitespace_column(get_line()) )
+			elif offset == "eol":
+				set_column( get_line_length() )
+			elif offset == "new_line_below":
+				var line: int = code_edit.get_caret_line()
+				var ind: int = code_edit.get_first_non_whitespace_column(line) + int(code_edit.get_line(line).ends_with(':'))
+				code_edit.insert_line_at(line + int(line < code_edit.get_line_count() - 1), "\t".repeat(ind))
+				move_line(+1)
+				set_column(ind)
+				set_mode(Mode.INSERT)
+			elif offset == "new_line_above":
+				var ind: int = code_edit.get_first_non_whitespace_column(code_edit.get_caret_line())
+				code_edit.insert_line_at(code_edit.get_caret_line(), "\t".repeat(ind))
+				move_line(-1)
+				set_column(ind)
+				set_mode(Mode.INSERT)
+		
+		KeyMap.ActionType.Visual:
+			set_mode(Mode.VISUAL)
+		
+		KeyMap.ActionType.Undo:
+			code_edit.undo()
+			set_mode(Mode.NORMAL)
+		KeyMap.ActionType.Redo:
+			code_edit.redo()
+			if mode != Mode.NORMAL:
+				set_mode(Mode.NORMAL)
+		
+		KeyMap.ActionType.Join:
+			var line: int = code_edit.get_caret_line()
+			code_edit.begin_complex_operation()
+			code_edit.select(line, get_line_length(), line + 1, code_edit.get_first_non_whitespace_column(line + 1) )
+			code_edit.delete_selection()
+			code_edit.deselect()
+			code_edit.insert_text_at_caret(' ')
+			code_edit.end_complex_operation()
+
+
+func handle_operator(operator: Dictionary):
+	match operator.type:
+		KeyMap.OperatorType.Delete:
+			code_edit.cut()
+			if mode != Mode.NORMAL:
+				set_mode(Mode.NORMAL)
+		
+		KeyMap.OperatorType.Paste:
+			code_edit.begin_complex_operation()
+			if is_mode_visual(mode):
+				code_edit.delete_selection()
+			if DisplayServer.clipboard_get().begins_with('\r\n'):
+				set_column(get_line_length())
+			else:
+				move_column(+1)
+			code_edit.deselect()
+			code_edit.paste()
+			move_column(-1)
+			code_edit.end_complex_operation()
+			set_mode(Mode.NORMAL)
+
+"""
+Code for 'dd':
+	code_edit.select( get_line()-1, get_line_length(get_line()-1), get_line(), get_line_length() )
+	DisplayServer.clipboard_set( '\r' + code_edit.get_selected_text() )
+	code_edit.delete_selection()
+	move_line(+1)
+"""
+
+
+func handle_operator_motion(operator: Dictionary, motion: Dictionary):
+	var p0: Vector2i = get_caret_pos()
+	var p1: Vector2i = handle_motion(motion)
+	# print('operator motion: %s -> %s' % [p0, p1])
 	
-	# handle_input_stream(cmd.cmd)
+	code_edit.select(
+		p0.y, p0.x,
+		p1.y, p1.x
+	)
+	handle_operator(operator)
 
 
-# See KeyMap.key_map and KeyMap.register_event()
-func handle_motion(cmd: Dictionary):
-	if cmd.has(KeyMap.MotionArgs.MoveByChars):
-		move_column( cmd[KeyMap.MotionArgs.MoveByChars] )
-		return
-	
-	if cmd.has(KeyMap.MotionArgs.MoveByLines):
-		move_line( cmd[KeyMap.MotionArgs.MoveByLines] )
-		return
-
-
+# Old commands we are yet to move
 func handle_input_stream(stream: String) -> String:
-	# BEHOLD, THE IF STATEMENT HELL!!! MUAHAHAHAHa
-	if stream == 'h':
-		move_column(-1)
-		return ''
-	if stream == 'j':
-		move_line(+1)
-		return ''
-	if stream == 'k':
-		move_line(-1)
-		return ''
-	if stream == 'l':
-		move_column(+1)
-		return ''
-	if stream.to_lower().begins_with('w'):
-		var p: Vector2i = get_word_edge_pos(get_line(), get_column(), '' if stream[0] == 'W' else KEYWORDS, WordEdgeMode.WORD)
-		set_caret_pos(p.y, p.x)
-		return ''
-	if stream.to_lower().begins_with('e'):
-		var p: Vector2i = get_word_edge_pos(get_line(), get_column(), '' if stream[0] == 'E' else KEYWORDS, WordEdgeMode.END)
-		set_caret_pos(p.y, p.x)
-		return ''
-	if stream.to_lower().begins_with('b'):
-		var p: Vector2i = get_word_edge_pos(get_line(), get_column(), '' if stream[0] == 'B' else KEYWORDS, WordEdgeMode.BEGINNING)
-		set_caret_pos(p.y, p.x)
-		return ''
-	
 	if stream.to_lower() .begins_with('f') or stream.to_lower() .begins_with('t'):
 		if stream.length() == 1:	return stream
 		
@@ -191,22 +285,6 @@ func handle_input_stream(stream: String) -> String:
 			globals.last_command = stream
 		return ''
 	
-	if stream.begins_with('p'):
-		code_edit.begin_complex_operation()
-		if is_mode_visual(mode):
-			code_edit.delete_selection()
-		if DisplayServer.clipboard_get().begins_with('\r\n'):
-			set_column(get_line_length())
-		else:
-			move_column(+1)
-		code_edit.deselect()
-		code_edit.paste()
-		move_column(-1)
-		code_edit.end_complex_operation()
-		set_mode(Mode.NORMAL)
-		globals.last_command = stream
-		return ''
-	
 	if stream.begins_with('c'):
 		if mode == Mode.VISUAL:
 			code_edit.cut()
@@ -236,11 +314,6 @@ func handle_input_stream(stream: String) -> String:
 			globals.last_command = stream
 		return ''
 	
-	if stream == 'x':
-		code_edit.copy()
-		code_edit.delete_selection()
-		globals.last_command = stream
-		return ''
 	if stream.begins_with('s'):
 		code_edit.cut()
 		set_mode(Mode.INSERT)
@@ -255,29 +328,8 @@ func handle_input_stream(stream: String) -> String:
 			selection_to = range[1]
 			update_visual_selection()
 	
-	if stream.begins_with('J') and mode == Mode.NORMAL:
-		code_edit.begin_complex_operation()
-		code_edit.select( get_line(), get_line_length(), get_line()+1, code_edit.get_first_non_whitespace_column(get_line()+1) )
-		code_edit.delete_selection()
-		code_edit.deselect()
-		code_edit.insert_text_at_caret(' ')
-		code_edit.end_complex_operation()
-		globals.last_command = stream
-		return ''
-	
-	if mode == Mode.NORMAL and stream.begins_with('D'):
-		code_edit.select( get_line(), code_edit.get_caret_column(), get_line(), get_line_length() )
-		code_edit.cut()
-		globals.last_command = stream
-		return ''
 	if stream.begins_with('P'):
 		status_bar.display_error("Unimplemented command: P")
-		return ''
-	if stream.begins_with('$'):
-		set_column(get_line_length())
-		return ''
-	if stream.begins_with('^'):
-		set_column( code_edit.get_first_non_whitespace_column(get_line()) )
 		return ''
 	if stream == 'G':
 		set_line(code_edit.get_line_count())
@@ -300,63 +352,10 @@ func handle_input_stream(stream: String) -> String:
 			return ''
 		return stream
 	
-	if stream == '0':
-		set_column(0)
-		return ''
-	if stream == 'i' and mode == Mode.NORMAL:
-		set_mode(Mode.INSERT)
-		return ''
-	if stream == 'a' and mode == Mode.NORMAL:
-		set_mode(Mode.INSERT)
-		move_column(+1)
-		return ''
-	if stream == 'I' and mode == Mode.NORMAL:
-		set_column(code_edit.get_first_non_whitespace_column(get_line()))
-		set_mode(Mode.INSERT)
-		return ''
-	if stream.begins_with('A') and mode == Mode.NORMAL:
-		set_mode(Mode.INSERT)
-		set_column(get_line_length())
-		return ''
-	if stream == 'v':
-		set_mode(Mode.VISUAL)
-		return ''
 	if stream == 'V':
 		set_mode(Mode.VISUAL_LINE)
 		return ''
-	if stream.begins_with('o'):
-		if is_mode_visual(mode):
-			var tmp: Vector2i = selection_from
-			selection_from = selection_to
-			selection_to = tmp
-			return ''
 		
-		var ind: int = code_edit.get_first_non_whitespace_column(get_line())
-		if code_edit.get_line(get_line()).ends_with(':'):
-			ind += 1
-		var line: int = code_edit.get_caret_line()
-		code_edit.insert_line_at(line + int(line < code_edit.get_line_count() - 1), "\t".repeat(ind))
-		move_line(+1)
-		set_column(ind)
-		set_mode(Mode.INSERT)
-		globals.last_command = stream
-		return ''
-	if stream.begins_with('O') and mode == Mode.NORMAL:
-		var ind: int = code_edit.get_first_non_whitespace_column(get_line())
-		code_edit.insert_line_at(get_line(), "\t".repeat(ind))
-		move_line(-1)
-		set_column(ind)
-		set_mode(Mode.INSERT)
-		globals.last_command = stream
-		return ''
-		
-	if stream == 'u':
-		code_edit.undo()
-		set_mode(Mode.NORMAL)
-		return ''
-	if stream.begins_with('<C-r>'):
-		code_edit.redo()
-		return ''
 	if stream.begins_with('r') and mode == Mode.NORMAL:
 		if stream.length() < 2:	return stream
 		code_edit.begin_complex_operation()
@@ -496,32 +495,38 @@ func handle_input_stream(stream: String) -> String:
 
 
 # Mostly used for commands like "w", "b", and "e"
-# delims is the keywords / characters used as delimiters. Usually, it's the constant KEYWORDS
-func get_word_edge_pos(from_line: int, from_col: int, delims: String, mode: WordEdgeMode) -> Vector2i:
-	var search_dir: int = -1 if mode == WordEdgeMode.BEGINNING else 1
-	var char_offset: int = 1 if mode == WordEdgeMode.END else -1
+# Bitmask bits:
+#  0 = char is normal char, 1 = char is keyword, 2 = chcar is space
+# TODO bug where it doesn't stop at line start
+func get_word_edge_pos(from_line: int, from_col: int, forward: bool, word_end: bool, big_word: bool) -> Vector2i:
+	var search_dir: int = int(forward) - int(!forward) # 1 if forward else -1
 	var line: int = from_line
-	var col: int = from_col + search_dir
-	var text: String = get_line_text(line)
+	var col: int = from_col\
+		# Nudge it by (going backwards) + (word end ("e") or beginning ("b"))
+		+ search_dir * (int(!forward) + int(word_end == forward))
+	# Cancel 1st bit (keywords) if big word so that keywords and normal chars are treated the same
+	var big_word_mask: int = 0b10 if big_word else 0b11
 	
+	var text: String = get_line_text(line)
 	while line >= 0 and line < code_edit.get_line_count():
 		while col >= 0 and col < text.length():
 			var char: String = text[col]
-			if SPACES.contains(char):
-				col += search_dir
-				continue
-			# Please don't question this lmao. It just works, alight?
-			var other_char: String = ' ' if col == (text.length()-1) * int(char_offset > 0) else text[col + char_offset]
+			var right: String = ' ' if col == text.length()-1 else text[col + 1] # ' ' if eol else the char to the right
 			
-			if SPACES.contains(other_char):
-				return Vector2i(col, line)
-			if delims.contains(char) != delims.contains(other_char):
-				return Vector2i(col, line)
+			var a: int = (int(KEYWORDS.contains(char)) | (int(SPACES.contains(char)) << 1)) & big_word_mask
+			var b: int = (int(KEYWORDS.contains(right)) | (int(SPACES.contains(right)) << 1)) & big_word_mask
+			
+			# Same as:	if a != b and (a if word_end else b) != 2	but without branching
+			if a != b and a*int(word_end) + b*int(!word_end) != 2:
+				return Vector2i(col + int(!word_end), line)
+			
 			col += search_dir
 		line += search_dir
 		text = get_line_text(line)
-		col = (text.length() - 1) * int(search_dir < 0 and char_offset < 0)
+		col = (text.length() - 1) * int(search_dir < 0)
+	
 	return Vector2i(from_col, from_line)
+
 
 # Get the 'edge' or a paragraph (like with { or } motions)
 # search_dir: are we searching up (-1) or down (1)?
@@ -574,21 +579,21 @@ func calc_double_motion_region(from_pos: Vector2i, stream: String, from_idx: int
 	var count: int = maxi(num, 1) # `num` can be 0 if no number was specified (e.g. d$, viW). In that case, default to 1
 	
 	# SINGLE MOTIONS
-	if primary.to_lower() == 'w':
-		var p1: Vector2i = repeat.call(count, from_pos,
-			func(pos: Vector2i):	return get_word_edge_pos(pos.y, pos.x, '' if primary == 'W' else KEYWORDS, WordEdgeMode.WORD)
-			)
-		return [from_pos, p1 + Vector2i.LEFT]
-	if primary.to_lower() == 'b':
-		var p0: Vector2i = repeat.call(count, from_pos,
-			func(pos: Vector2i):	return get_word_edge_pos(pos.y, pos.x, '' if primary == 'B' else KEYWORDS, WordEdgeMode.BEGINNING)
-			)
-		return [p0, from_pos + Vector2i.LEFT]
-	if primary.to_lower() == 'e':
-		var p1: Vector2i = repeat.call(count, from_pos,
-			func(pos: Vector2i):	return get_word_edge_pos(pos.y, pos.x, '' if primary == 'E' else KEYWORDS, WordEdgeMode.END)
-			)
-		return [from_pos, p1]
+#	if primary.to_lower() == 'w':
+#		var p1: Vector2i = repeat.call(count, from_pos,
+#			func(pos: Vector2i):	return get_word_edge_pos(pos.y, pos.x, '' if primary == 'W' else KEYWORDS, WordEdgeMode.WORD)
+#			)
+#		return [from_pos, p1 + Vector2i.LEFT]
+#	if primary.to_lower() == 'b':
+#		var p0: Vector2i = repeat.call(count, from_pos,
+#			func(pos: Vector2i):	return get_word_edge_pos(pos.y, pos.x, '' if primary == 'B' else KEYWORDS, WordEdgeMode.BEGINNING)
+#			)
+#		return [p0, from_pos + Vector2i.LEFT]
+#	if primary.to_lower() == 'e':
+#		var p1: Vector2i = repeat.call(count, from_pos,
+#			func(pos: Vector2i):	return get_word_edge_pos(pos.y, pos.x, '' if primary == 'E' else KEYWORDS, WordEdgeMode.END)
+#			)
+#		return [from_pos, p1]
 	
 	if primary == '$':
 		var p1: Vector2i = Vector2i(get_line_length(from_pos.y), from_pos.y)
@@ -615,10 +620,10 @@ func calc_double_motion_region(from_pos: Vector2i, stream: String, from_idx: int
 		return [from_pos] # Return one element to signal that it's incomplete
 	
 	# iw, iW
-	if primary == 'i' and secondary.to_lower() == 'w':
-		var p0: Vector2i = get_word_edge_pos(from_pos.y, from_pos.x + 1, '' if secondary == 'W' else KEYWORDS, WordEdgeMode.BEGINNING)
-		var p1: Vector2i = get_word_edge_pos(from_pos.y, from_pos.x - 1, '' if secondary == 'W' else KEYWORDS, WordEdgeMode.END)
-		return [ p0, p1 ]
+#	if primary == 'i' and secondary.to_lower() == 'w':
+#		var p0: Vector2i = get_word_edge_pos(from_pos.y, from_pos.x + 1, '' if secondary == 'W' else KEYWORDS, WordEdgeMode.BEGINNING)
+#		var p1: Vector2i = get_word_edge_pos(from_pos.y, from_pos.x - 1, '' if secondary == 'W' else KEYWORDS, WordEdgeMode.END)
+#		return [ p0, p1 ]
 	
 	# ip
 	if primary == 'i' and secondary == 'p':
@@ -648,7 +653,7 @@ func toggle_comment(line: int):
 		code_edit.set_line(line, text.insert(ind, '# '))
 		return
 	# Uncomment line
-	var start_col: int = get_word_edge_pos(line, ind, KEYWORDS, WordEdgeMode.WORD).x
+	var start_col: int = get_word_edge_pos(line, ind, true, false, true).x
 	code_edit.select(line, ind, line, start_col)
 	code_edit.delete_selection()
 
