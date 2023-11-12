@@ -1,46 +1,48 @@
-class_name KeyMap
+class_name KeyMap extends RefCounted
 ## Hanldes input stream and key mapping
 
 
-enum Type {
+enum CmdType {
 	Motion,
 	Operator,
 	Action,
 	Incomplete, # Await input
 }
 
-enum Motion {
-	MoveX,
-	MoveY,
+enum MotionArgs {
+	MoveByChars,
+	MoveByLines,
 }
 
 
-static var key_map: Array[Dictionary] = [
-	{ "keys": ["j"], "type": Type.Motion, "motion": Motion.MoveX }
+# `static var` doesn't work
+const key_map: Array[Dictionary] = [
+	{ "keys": ["h"], "cmds": [ { "type": CmdType.Motion, MotionArgs.MoveByChars: -1 } ] },
+	{ "keys": ["l"], "cmds": [ { "type": CmdType.Motion, MotionArgs.MoveByChars: 1 } ] },
+	{ "keys": ["j"], "cmds": [ { "type": CmdType.Motion, MotionArgs.MoveByLines: 1 } ] },
+	{ "keys": ["k"], "cmds": [ { "type": CmdType.Motion, MotionArgs.MoveByLines: -1 } ] },
 ]
 
-static var whitelist = [
+# `static var` also doesn't work
+const whitelist = [
 	"<C-s>"
 ]
 
 
-static var input_stream: String = ""
+var input_stream: Array[String] = []
 
 
-static func register_event(event: InputEventKey) -> Dictionary:
+## Returns: Array[Dictionary]
+func register_event(event: InputEventKey) -> Array:
 	var ch: String = get_event_char(event)
-	# print("[KeyMap::register_event()] registered event: ", ch) # DEBUG
-	input_stream += ch
+	print("[KeyMap::register_event()] registered event: ", ch) # DEBUG
+	input_stream.append(ch)
 	
-	var a: Array = split_count(input_stream)
-	if a.is_empty():	return {}
-	
-	var count: int = a[0]
-	var cmd: String = a[1]
-	return {
-		'count' : count,
-		'cmd' : cmd,
-	}
+	for keymap in key_map:
+		if !do_keys_match(input_stream, keymap.keys):	continue
+		clear()
+		return keymap.cmds
+	return []
 
 
 static func get_event_char(event: InputEventKey) -> String:
@@ -54,20 +56,18 @@ static func get_event_char(event: InputEventKey) -> String:
 	return char(event.unicode)
 
 
-static func clear_input_stream():
-	input_stream = ""
+static func do_keys_match(a: Array, b: Array) -> bool:
+	if a.size() != b.size():	return false
+	for i in a.size():
+		if a[i] != b[i]:
+			return false
+	return true
 
 
+func clear():
+	input_stream = []
 
-# returns:
-#  [] if invalid / incomplete
-#  [ count: int, rest of the string: String ]
-static func split_count(str: String) -> Array:
-	if str.is_empty():	return []
-	if str[0] == '0':	return [] # Those that start with '0' is are exceptions
-	for i in str.length():
-		if !'0123456789'.contains(str[i]):
-			return [ maxi(str.left(i).to_int(), 1), str.substr(i) ]
-	return [] # All digits
 
+func get_input_stream_as_string() -> String:
+	return ''.join(PackedStringArray(input_stream))
 

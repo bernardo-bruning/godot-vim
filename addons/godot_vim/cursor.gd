@@ -11,6 +11,7 @@ const SPACES = Constants.SPACES
 var code_edit: CodeEdit
 var command_line: CommandLine
 var status_bar: StatusBar
+var key_map: KeyMap
 
 var mode: Mode = Mode.NORMAL
 var caret: Vector2
@@ -22,9 +23,14 @@ func _init():
 	set_focus_mode(FOCUS_ALL)
 
 func _ready():
+	key_map = KeyMap.new()
+	
 	code_edit.connect("focus_entered", focus_entered)
 	code_edit.connect("caret_changed", cursor_changed)
 	call_deferred('set_mode', Mode.NORMAL)
+
+func _exit_tree():
+	key_map = null
 
 func cursor_changed():
 	draw_cursor()
@@ -37,7 +43,7 @@ func focus_entered():
 
 func reset_normal():
 	code_edit.cancel_code_completion()
-	KeyMap.clear_input_stream()
+	key_map.clear()
 	set_mode(Mode.NORMAL)
 	selection_from = Vector2i.ZERO
 	selection_to = Vector2i.ZERO
@@ -83,15 +89,31 @@ func _input(event):
 	if mode == Mode.INSERT or mode == Mode.COMMAND:	return
 
 	if event.keycode == KEY_ESCAPE:
-		KeyMap.clear_input_stream()
+		key_map.clear()
 		return
 	
-	var cmd: Dictionary = KeyMap.register_event(event)
-	status_bar.display_text(KeyMap.input_stream)
-	if cmd.is_empty():	return # Await further input
+	var cmds: Array = key_map.register_event(event)
+	status_bar.display_text(key_map.get_input_stream_as_string())
+	if cmds.is_empty():	return # Await further input
 	
-	for i in cmd.count:
-		KeyMap.input_stream = handle_input_stream(cmd.cmd)
+	for cmd in cmds:
+		# `if else` is faster than `match` (somehow)
+		if cmd.type == KeyMap.CmdType.Motion:
+			handle_motion(cmd)
+		
+	
+	# handle_input_stream(cmd.cmd)
+
+
+# See KeyMap.key_map and KeyMap.register_event()
+func handle_motion(cmd: Dictionary):
+	if cmd.has(KeyMap.MotionArgs.MoveByChars):
+		move_column( cmd[KeyMap.MotionArgs.MoveByChars] )
+		return
+	
+	if cmd.has(KeyMap.MotionArgs.MoveByLines):
+		move_line( cmd[KeyMap.MotionArgs.MoveByLines] )
+		return
 
 
 func handle_input_stream(stream: String) -> String:
