@@ -14,7 +14,6 @@ var status_bar: StatusBar
 
 var mode: Mode = Mode.NORMAL
 var caret: Vector2
-var input_stream: String = ""
 var selection_from: Vector2i = Vector2i() # For visual modes
 var selection_to: Vector2i = Vector2i() # For visual modes
 var globals: Dictionary = {}
@@ -38,7 +37,7 @@ func focus_entered():
 
 func reset_normal():
 	code_edit.cancel_code_completion()
-	input_stream = ''
+	KeyMap.clear_input_stream()
 	set_mode(Mode.NORMAL)
 	selection_from = Vector2i.ZERO
 	selection_to = Vector2i.ZERO
@@ -84,34 +83,15 @@ func _input(event):
 	if mode == Mode.INSERT or mode == Mode.COMMAND:	return
 
 	if event.keycode == KEY_ESCAPE:
-		input_stream = ''
+		KeyMap.clear_input_stream()
 		return
 	
-	var ch: String
-	if !event is InputEventMouseMotion and !event is InputEventMouseButton:
-		ch = char(event.unicode)
-
-	if Input.is_key_pressed(KEY_ENTER):
-		ch = '<CR>'
-	if Input.is_key_pressed(KEY_TAB):
-		ch = '<TAB>'
-	if Input.is_key_pressed(KEY_CTRL):
-		if OS.is_keycode_unicode(event.keycode):
-			var c: String = char(event.keycode)
-			if !Input.is_key_pressed(KEY_SHIFT):
-				c = c.to_lower()
-			ch = '<C-%s>' % c
+	var cmd: Dictionary = KeyMap.register_event(event)
+	status_bar.display_text(KeyMap.input_stream)
+	if cmd.is_empty():	return # Await further input
 	
-	input_stream += ch
-	status_bar.display_text(input_stream)
-	
-	var s: int = globals.vim_plugin.get_first_non_digit_idx(input_stream)
-	if s == -1:	return # All digits
-	
-	var cmd: String = input_stream.substr(s)
-	var count: int = maxi( input_stream.left(s).to_int(), 1 )
-	for i in count:
-		input_stream = handle_input_stream(cmd)
+	for i in cmd.count:
+		KeyMap.input_stream = handle_input_stream(cmd.cmd)
 
 
 func handle_input_stream(stream: String) -> String:
