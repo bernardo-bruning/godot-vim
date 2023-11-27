@@ -14,7 +14,7 @@ var status_bar: StatusBar
 var key_map: KeyMap
 
 var mode: Mode = Mode.NORMAL
-var caret: Vector2
+var caret: Vector2 # TODO remove this?
 var selection_from: Vector2i = Vector2i() # For visual modes
 var selection_to: Vector2i = Vector2i() # For visual modes
 var globals: Dictionary = {}
@@ -23,7 +23,7 @@ func _init():
 	set_focus_mode(FOCUS_ALL)
 
 func _ready():
-	key_map = KeyMap.new()
+	key_map = KeyMap.new(self)
 	
 	code_edit.connect("focus_entered", focus_entered)
 	code_edit.connect("caret_changed", cursor_changed)
@@ -95,144 +95,7 @@ func _input(event):
 	# See KeyMap.key_map, KeyMap.register_event()
 	var cmd: Dictionary = key_map.register_event(event, mode)
 	status_bar.display_text(key_map.get_input_stream_as_string())
-	if cmd.is_empty():	return # Await further input
-	
-	# `if else` is faster than `match` (especially with small sets)
-	if cmd.type == KeyMap.Motion:
-		var pos: Vector2i = handle_motion(cmd.motion)
-		set_caret_pos(pos.y, pos.x)
-		return
-	if cmd.type == KeyMap.Action and mode == Mode.NORMAL:
-		handle_action(cmd.action)
-		return
-	if cmd.type == KeyMap.Operator:
-		handle_operator(cmd.operator)
-		return
-	if cmd.type == KeyMap.OperatorMotion:
-		handle_operator_motion(cmd.operator, cmd.motion)
-		return
 
-
-# See KeyMap.key_map where type == Motion, KeyMap.register_event()
-func handle_motion(motion: Dictionary) -> Vector2i:
-	if !motion.has("type"):
-		return get_caret_pos()
-	
-	match motion.type:
-		KeyMap.MotionType.MoveByChars:
-			return Vector2i(get_column() + motion.move_by, get_line())
-		KeyMap.MotionType.MoveByLines:
-			return Vector2i(get_column(), get_line() + motion.move_by)
-		
-		KeyMap.MotionType.MoveByWord:
-			return get_word_edge_pos(
-				get_line(),
-				get_column(),
-				motion.get("forward", true),
-				motion.get("word_end", false),
-				motion.get("big_word", false)
-			)
-		
-		KeyMap.MotionType.StartOfLine:
-			return Vector2i(0, get_line())
-		KeyMap.MotionType.EndOfLine:
-			return Vector2(get_line_length() - int(!motion.get("inclusive", false)), get_line())
-		KeyMap.MotionType.FirstNonWhitespaceChar:
-			return Vector2i(code_edit.get_first_non_whitespace_column(get_line()), get_line())
-		
-		var t:
-			push_warning("Unknown motion: %s", t)
-			return get_caret_pos()
-
-
-# See KeyMap.key_map where type == Action, KeyMap.register_event()
-func handle_action(action: Dictionary):
-	match action.type:
-		KeyMap.ActionType.Insert:
-			set_mode(Mode.INSERT)
-			var offset: String = action.get("offset", "in_place")
-			
-			if offset == "after":
-				move_column(1)
-			elif offset == "bol":
-				set_column( code_edit.get_first_non_whitespace_column(get_line()) )
-			elif offset == "eol":
-				set_column( get_line_length() )
-			elif offset == "new_line_below":
-				var line: int = code_edit.get_caret_line()
-				var ind: int = code_edit.get_first_non_whitespace_column(line) + int(code_edit.get_line(line).ends_with(':'))
-				code_edit.insert_line_at(line + int(line < code_edit.get_line_count() - 1), "\t".repeat(ind))
-				move_line(+1)
-				set_column(ind)
-				set_mode(Mode.INSERT)
-			elif offset == "new_line_above":
-				var ind: int = code_edit.get_first_non_whitespace_column(code_edit.get_caret_line())
-				code_edit.insert_line_at(code_edit.get_caret_line(), "\t".repeat(ind))
-				move_line(-1)
-				set_column(ind)
-				set_mode(Mode.INSERT)
-		
-		KeyMap.ActionType.Visual:
-			set_mode(Mode.VISUAL)
-		
-		KeyMap.ActionType.Undo:
-			code_edit.undo()
-			set_mode(Mode.NORMAL)
-		KeyMap.ActionType.Redo:
-			code_edit.redo()
-			if mode != Mode.NORMAL:
-				set_mode(Mode.NORMAL)
-		
-		KeyMap.ActionType.Join:
-			var line: int = code_edit.get_caret_line()
-			code_edit.begin_complex_operation()
-			code_edit.select(line, get_line_length(), line + 1, code_edit.get_first_non_whitespace_column(line + 1) )
-			code_edit.delete_selection()
-			code_edit.deselect()
-			code_edit.insert_text_at_caret(' ')
-			code_edit.end_complex_operation()
-
-
-func handle_operator(operator: Dictionary):
-	match operator.type:
-		KeyMap.OperatorType.Delete:
-			code_edit.cut()
-			if mode != Mode.NORMAL:
-				set_mode(Mode.NORMAL)
-		
-		KeyMap.OperatorType.Paste:
-			code_edit.begin_complex_operation()
-			if is_mode_visual(mode):
-				code_edit.delete_selection()
-			if DisplayServer.clipboard_get().begins_with('\r\n'):
-				set_column(get_line_length())
-			else:
-				move_column(+1)
-			code_edit.deselect()
-			code_edit.paste()
-			move_column(-1)
-			code_edit.end_complex_operation()
-			set_mode(Mode.NORMAL)
-
-"""
-Code for 'dd':
-	code_edit.select( get_line()-1, get_line_length(get_line()-1), get_line(), get_line_length() )
-	DisplayServer.clipboard_set( '\r' + code_edit.get_selected_text() )
-	code_edit.delete_selection()
-	move_line(+1)
-"""
-
-
-func handle_operator_motion(operator: Dictionary, motion: Dictionary):
-	var p0: Vector2i = get_caret_pos()
-	var p1: Vector2i = handle_motion(motion)
-	# print('operator motion: %s -> %s' % [p0, p1])
-	
-	code_edit.select(
-		p0.y, p0.x,
-		p1.y, p1.x
-	)
-	handle_operator(operator)
 
 
 # Old commands we are yet to move
@@ -260,6 +123,7 @@ func handle_input_stream(stream: String) -> String:
 			set_column(col)
 		return ''
 	
+	# "d" is done, but not "dd"
 	if stream.begins_with('d'):
 		if is_mode_visual(mode):
 			DisplayServer.clipboard_set( '\r' + code_edit.get_selected_text() )
@@ -352,10 +216,6 @@ func handle_input_stream(stream: String) -> String:
 			return ''
 		return stream
 	
-	if stream == 'V':
-		set_mode(Mode.VISUAL_LINE)
-		return ''
-		
 	if stream.begins_with('r') and mode == Mode.NORMAL:
 		if stream.length() < 2:	return stream
 		code_edit.begin_complex_operation()
@@ -497,7 +357,7 @@ func handle_input_stream(stream: String) -> String:
 # Mostly used for commands like "w", "b", and "e"
 # Bitmask bits:
 #  0 = char is normal char, 1 = char is keyword, 2 = chcar is space
-# TODO bug where it doesn't stop at line start
+# TODO bug where it doesn't stop at line start: func get_char_wrapping()
 func get_word_edge_pos(from_line: int, from_col: int, forward: bool, word_end: bool, big_word: bool) -> Vector2i:
 	var search_dir: int = int(forward) - int(!forward) # 1 if forward else -1
 	var line: int = from_line
@@ -793,3 +653,134 @@ func draw_cursor():
 		code_edit.set_caret_column(column)
 	
 	code_edit.select(line, column, line, column+1)
+
+
+
+# ------------------------------------------------------------------------------
+# * COMMANDS *
+# ------------------------------------------------------------------------------
+
+# MOTIONS ----------------------------------------------------------------------
+# Motion commands must return a Vector2i with the cursor's new position
+
+func cmd_move_by_chars(args: Dictionary) -> Vector2i:
+	return Vector2i(get_column() + args.get("move_by", 0), get_line())
+
+func cmd_move_by_lines(args: Dictionary) -> Vector2i:
+	return Vector2i(get_column(), get_line() + args.get("move_by", 0))
+
+func cmd_move_by_word(args: Dictionary) -> Vector2i:
+	return get_word_edge_pos(
+		get_line(),
+		get_column(),
+		args.get("forward", true),
+		args.get("word_end", false),
+		args.get("big_word", false)
+	)
+
+func cmd_move_to_bol(args: Dictionary) -> Vector2i:
+	return Vector2i(0, get_line())
+
+func cmd_move_to_eol(args: Dictionary) -> Vector2i:
+	return Vector2(get_line_length() - int(!args.get("inclusive", false)), get_line())
+
+func cmd_move_to_first_non_whitespace_char(args: Dictionary) -> Vector2i:
+	return Vector2i(code_edit.get_first_non_whitespace_column(get_line()), get_line())
+
+
+# ACTIONS ----------------------------------------------------------------------
+
+func cmd_insert(args: Dictionary):
+	set_mode(Mode.INSERT)
+	var offset: String = args.get("offset", "in_place")
+	
+	if offset == "after":
+		move_column(1)
+	elif offset == "bol":
+		set_column( code_edit.get_first_non_whitespace_column(get_line()) )
+	elif offset == "eol":
+		set_column( get_line_length() )
+	elif offset == "new_line_below":
+		var line: int = code_edit.get_caret_line()
+		var ind: int = code_edit.get_first_non_whitespace_column(line) + int(code_edit.get_line(line).ends_with(':'))
+		code_edit.insert_line_at(line + int(line < code_edit.get_line_count() - 1), "\t".repeat(ind))
+		move_line(+1)
+		set_column(ind)
+		set_mode(Mode.INSERT)
+	elif offset == "new_line_above":
+		var ind: int = code_edit.get_first_non_whitespace_column(code_edit.get_caret_line())
+		code_edit.insert_line_at(code_edit.get_caret_line(), "\t".repeat(ind))
+		move_line(-1)
+		set_column(ind)
+		set_mode(Mode.INSERT)
+
+func cmd_visual(_args: Dictionary):
+	set_mode(Mode.VISUAL)
+
+func cmd_visual_line(_args: Dictionary):
+	set_mode(Mode.VISUAL_LINE)
+
+func cmd_undo(_args: Dictionary):
+	code_edit.undo()
+	set_mode(Mode.NORMAL)
+
+func cmd_redo(_args: Dictionary):
+	code_edit.redo()
+	if mode != Mode.NORMAL:
+		set_mode(Mode.NORMAL)
+
+func cmd_join(_args: Dictionary):
+	var line: int = code_edit.get_caret_line()
+	code_edit.begin_complex_operation()
+	code_edit.select(line, get_line_length(), line + 1, code_edit.get_first_non_whitespace_column(line + 1) )
+	code_edit.delete_selection()
+	code_edit.deselect()
+	code_edit.insert_text_at_caret(' ')
+	code_edit.end_complex_operation()
+
+
+# OPERATIONS ----------------------------------------------------------------------
+
+func cmd_delete(_args: Dictionary):
+	code_edit.cut()
+	if mode != Mode.NORMAL:
+		set_mode(Mode.NORMAL)
+
+
+
+"""
+
+		KeyMap.OperatorType.Change:
+			pass
+#			Code for cc:
+#			code_edit.begin_complex_operation()
+#			var l: int = get_line()
+#			var ind: int = code_edit.get_first_non_whitespace_column(l)
+#			code_edit.select( l-1, get_line_length(l-1), l, get_line_length(l) )
+#			code_edit.cut()
+#			code_edit.insert_line_at(get_line()+1, "\t".repeat(ind))
+#			code_edit.end_complex_operation()
+#			move_line(+1)
+#			set_mode(Mode.INSERT)
+
+"""
+
+
+
+
+
+func cmd_paste(_args: Dictionary):
+	code_edit.begin_complex_operation()
+	if is_mode_visual(mode):
+		code_edit.delete_selection()
+	if DisplayServer.clipboard_get().begins_with('\r\n'):
+		set_column(get_line_length())
+	else:
+		move_column(+1)
+	code_edit.deselect()
+	code_edit.paste()
+	move_column(-1)
+	code_edit.end_complex_operation()
+	set_mode(Mode.NORMAL)
+
+
