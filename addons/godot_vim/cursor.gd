@@ -94,90 +94,14 @@ func _input(event):
 	status_bar.display_text(key_map.get_input_stream_as_string())
 
 
-
-# Old commands we are yet to move (delete as they get implemented)
+""" TODO Old commands we are yet to move (delete as they get implemented)
 func handle_input_stream(stream: String) -> String:
-	if stream.to_lower() .begins_with('f') or stream.to_lower() .begins_with('t'):
-		if stream.length() == 1:	return stream
-		
-		var char: String = stream[1] # TODO check for <TAB>, <CR> and <Ctrl-somethign>
-		globals.last_search = stream.left(2) # First 2 in case it's longer
-		var col: int = find_char_motion(get_line(), get_column(), stream[0], char)
-		if col >= 0:
-			set_column(col)
-		return ''
-	if stream.begins_with(';') and globals.has('last_search'):
-		var cmd: String = globals.last_search[0]
-		var col: int = find_char_motion(get_line(), get_column(), cmd, globals.last_search[1])
-		if col >= 0:
-			set_column(col)
-		return ''
-	if stream.begins_with(',') and globals.has('last_search'):
-		var cmd: String = globals.last_search[0]
-		cmd = cmd.to_upper() if is_lowercase(cmd) else cmd.to_lower()
-		var col: int = find_char_motion(get_line(), get_column(), cmd, globals.last_search[1])
-		if col >= 0:
-			set_column(col)
-		return ''
-	
-	if stream.begins_with('g'):
-		if stream.begins_with('gc') and is_mode_visual(mode):
-			code_edit.begin_complex_operation()
-			for line in range( min(selection_from.y, selection_to.y), max(selection_from.y, selection_to.y)+1 ):
-				toggle_comment(line)
-			code_edit.end_complex_operation()
-			set_mode(Mode.NORMAL)
-			return ''
-		if stream.begins_with('gcc') and mode == Mode.NORMAL:
-			toggle_comment(get_line())
-			globals.last_command = stream
-			return ''
-		return stream
-	
-	if stream.begins_with('r') and mode == Mode.NORMAL:
-		if stream.length() < 2:	return stream
-		code_edit.begin_complex_operation()
-		code_edit.delete_selection()
-		var ch: String = stream[1]
-		if stream.substr(1).begins_with('<CR>'):
-			ch = '\n'
-		elif stream.substr(1).begins_with('<TAB>'):
-			ch = '\t'
-		code_edit.insert_text_at_caret(ch)
-		move_column(-1)
-		code_edit.end_complex_operation()
-		globals.last_command = stream
-	
 	if stream == '.':
 		if globals.has('last_command'):
 			handle_input_stream(globals.last_command)
 			call_deferred(&'set_mode', Mode.NORMAL)
 		return ''
 	
-	if stream.begins_with('z'):
-		if stream.begins_with('zz') and mode == Mode.NORMAL:
-			code_edit.center_viewport_to_caret()
-			return ''
-		return stream
-	
-	if stream.begins_with('>'):
-		if is_mode_visual(mode) and stream.length() == 1:
-			code_edit.indent_lines()
-			return ''
-		if stream.length() == 1:	return stream
-		if stream.begins_with('>>') and mode == Mode.NORMAL:
-			code_edit.indent_lines()
-			globals.last_command = stream
-			return ''
-	if stream.begins_with('<'):
-		if is_mode_visual(mode) and stream.length() == 1:
-			code_edit.unindent_lines()
-			return ''
-		if stream.length() == 1:	return stream
-		if stream.begins_with('<<') and mode == Mode.NORMAL:
-			code_edit.unindent_lines()
-			globals.last_command = stream
-		return ''
 	
 	if stream.begins_with('m') and mode == Mode.NORMAL:
 		if stream.length() < 2: 	return stream
@@ -203,7 +127,7 @@ func handle_input_stream(stream: String) -> String:
 		globals.vim_plugin.edit_script(mark.file, mark.pos)
 		return ''
 	return ''
-
+"""
 
 # Mostly used for commands like "w", "b", and "e"
 # Bitmask bits:
@@ -253,103 +177,38 @@ func get_paragraph_edge_pos(from_line: int, forward: bool):
 		line += search_dir
 	return Vector2i(0, line)
 
-# TODO update this
-# motion: command like "f", "t", "F", or "T"
-# in_line: the line to search in
-# motion: f, t, F, or T
-func find_char_motion(in_line: int, from_col: int, motion: String, char: String) -> int:
-	var search_dir: int = 1 if is_lowercase(motion) else -1
-	var offset: int = int(motion == 'T') - int(motion == 't') # 1 if T,  -1 if t,  0 otherwise
-	var text: String = get_line_text(in_line)
+
+func find_char_in_line(line: int, from_col: int, forward: bool, stop_before: bool, char: String) -> int:
+	var text: String = get_line_text(line)
 	
-	var col: int = -1
-	if motion == 'f' or motion == 't':
-		col = text.find(char, from_col + search_dir)
-	elif motion == 'F' or motion == 'T':
-		col = text.rfind(char, from_col + search_dir)
-	if col == -1:
+	# Search char
+	var col: int = text.find(char, from_col + 1)  if forward else  text.rfind(char, from_col - 1)
+	if col == -1: # Not found
 		return -1
-	return col + offset
+	
+	# col + offset
+	# where offset = ( int(!forward) - int(forward) ) * int(stop_before)
+	# 	= 1 if forward, -1 if !forward, 0 otherwise
+	return col + (int(!forward) - int(forward)) * int(stop_before)
 
-## Currently supports:
-##    wW, bB, eE, ^, $, {, }, fF, tT
-##    iw and iW, ip
-##    repeating motions (e.g. 2w, 4} )
-## returns: [ Vector2i from_pos, Vector2i to_pos ]
-# TODO remove this once moving is done
-func calc_double_motion_region(from_pos: Vector2i, stream: String, from_idx: int = 0) -> Array[Vector2i]:
-	var num: int = stream.to_int()
-	if num > 0: # if the motion is repeated (e.g. d2w, y4E), then offset
-		from_idx += str(num).length()
-	var primary: String = get_stream_char(stream, from_idx)
-	
-	if primary == '':
-		return [from_pos] # Incomplete
-	
-	var repeat: Callable = globals.vim_plugin.repeat_accum
-	var count: int = maxi(num, 1) # `num` can be 0 if no number was specified (e.g. d$, viW). In that case, default to 1
-	
-	if primary == '$':
-		var p1: Vector2i = Vector2i(get_line_length(from_pos.y), from_pos.y)
-		return [from_pos, p1]
-	if primary == '^':
-		var p0: Vector2i = Vector2i(code_edit.get_first_non_whitespace_column(from_pos.y), from_pos.y)
-		return [p0, from_pos + Vector2i.LEFT]
-	
-	if primary == '{':
-		var p0: Vector2i = repeat.call(count, from_pos,
-			func(pos: Vector2i):	return get_paragraph_edge_pos(pos.y, -1)
-			)
-		return [ p0, from_pos ]
-	if primary == '}':
-		var p1: Vector2i = repeat.call(count, from_pos,
-			func(pos: Vector2i):	return get_paragraph_edge_pos(pos.y, 1)
-			)
-		return [ from_pos, p1 ]
-	
-	# DOUBLE MOTIONS
-	# TODO make it work for 'a' too (eg 'daw' 'vap')
-	var secondary: String = get_stream_char(stream, from_idx + 1)
-	if secondary == '' or num > 0: # Double motions don't repeat
-		return [from_pos] # Return one element to signal that it's incomplete
-	
-	# iw, iW
-#	if primary == 'i' and secondary.to_lower() == 'w':
-#		var p0: Vector2i = get_word_edge_pos(from_pos.y, from_pos.x + 1, '' if secondary == 'W' else KEYWORDS, WordEdgeMode.BEGINNING)
-#		var p1: Vector2i = get_word_edge_pos(from_pos.y, from_pos.x - 1, '' if secondary == 'W' else KEYWORDS, WordEdgeMode.END)
-#		return [ p0, p1 ]
-	
-	# ip
-	if primary == 'i' and secondary == 'p':
-		var p0: Vector2i = get_paragraph_edge_pos(from_pos.y + 1, -1) + Vector2i.DOWN
-		var p1: Vector2i = get_paragraph_edge_pos(from_pos.y - 1, 1)
-		return [ p0, p1 ]
-	
-	# In-line search for `secondary`
-	if primary.to_lower() == 'f' or primary.to_lower() == 't':
-		globals.last_search = primary + secondary
-		var col: int = find_char_motion(get_line(), get_column(), primary, secondary)
-		if col == -1:	return []
-		
-		# Reverse range if searching backwards
-		if is_lowercase(primary): # f or t
-			return [ from_pos, Vector2i(col, from_pos.y) ]
-		else: # F or T
-			return [ Vector2i(col, from_pos.y), from_pos ]
-	
-	return [] # Unknown combination
 
-func toggle_comment(line: int):
+func set_line_commented(line: int, is_commented: bool):
 	var ind: int = code_edit.get_first_non_whitespace_column(line)
 	var text: String = get_line_text(line)
-	# Comment line
-	if text[ind] != '#':
+	
+	if is_commented:
 		code_edit.set_line(line, text.insert(ind, '# '))
 		return
-	# Uncomment line
+	# We use get_word_edge_pos() in case there's multiple '#'s
 	var start_col: int = get_word_edge_pos(line, ind, true, false, true).x
 	code_edit.select(line, ind, line, start_col)
 	code_edit.delete_selection()
+
+func is_line_commented(line: int) -> bool:
+	var ind: int = code_edit.get_first_non_whitespace_column(line)
+	var text: String = get_line_text(line)
+	return text[ind] == '#'
+
 
 func set_mode(m: int):
 	var old_mode: int = mode
@@ -532,6 +391,9 @@ func cmd_move_to_eof(args: Dictionary) -> Vector2i:
 	return Vector2i(0, code_edit.get_line_count())
 
 func cmd_find_again(args: Dictionary) -> Vector2i:
+	if command_line.search_pattern.is_empty():
+		return get_caret_pos()
+	
 	var rmatch: RegExMatch
 	if args.get('forward', false):
 		rmatch = globals.vim_plugin.search_regex(
@@ -548,7 +410,42 @@ func cmd_find_again(args: Dictionary) -> Vector2i:
 	
 	if rmatch == null:
 		return get_caret_pos()
-	return globals.vim_plugin.idx_to_pos(code_edit,rmatch.get_start())
+	return globals.vim_plugin.idx_to_pos(code_edit, rmatch.get_start())
+
+func cmd_find_in_line(args: Dictionary) -> Vector2i:
+	var line: int = get_line()
+	var col: int = find_char_in_line(
+		line,
+		get_column(),
+		args.get('forward', false),
+		args.get('stop_before', false),
+		args.get('selected_char', '')
+		)
+	
+	globals.last_search = args
+	
+	if col >= 0:
+		return Vector2i(col, line)
+	return Vector2i(get_column(), line)
+
+# 'mut' ('mutable') because 'args' will be changed
+func cmd_find_in_line_again(args_mut: Dictionary) -> Vector2i:
+	if !globals.has('last_search'):	return get_caret_pos()
+	
+	var last_search: Dictionary = globals.last_search
+	var line: int = get_line()
+	var col: int = find_char_in_line(
+		line,
+		get_column(),
+		last_search.get('forward', false) != args_mut.get('invert', false), # Invert 'forward' if necessary (xor)
+		last_search.get('stop_before', false),
+		last_search.get('selected_char', '')
+		)
+	
+	args_mut.inclusive = globals.last_search.get('inclusive', false)
+	if col >= 0:
+		return Vector2i(col, line)
+	return Vector2i(get_column(), line)
 
 
 # ACTIONS ----------------------------------------------------------------------
@@ -577,11 +474,11 @@ func cmd_insert(args: Dictionary):
 		set_column(ind)
 		set_mode(Mode.INSERT)
 
-func cmd_visual(_args: Dictionary):
-	set_mode(Mode.VISUAL)
-
-func cmd_visual_line(_args: Dictionary):
-	set_mode(Mode.VISUAL_LINE)
+func cmd_visual(args: Dictionary):
+	if args.get('line_wise', false):
+		set_mode(Mode.VISUAL_LINE)
+	else:
+		set_mode(Mode.VISUAL)
 
 func cmd_undo(_args: Dictionary):
 	code_edit.undo()
@@ -607,6 +504,22 @@ func cmd_join(_args: Dictionary):
 	code_edit.delete_selection()
 	code_edit.deselect()
 	code_edit.insert_text_at_caret(' ')
+	code_edit.end_complex_operation()
+
+func cmd_center_caret(_args: Dictionary):
+	code_edit.center_viewport_to_caret()
+
+func cmd_replace(args: Dictionary):
+	var char: String = args.get('selected_char', '')
+	if char.begins_with('<CR>'):
+		char = '\n'
+	elif char.begins_with('<TAB>'):
+		char = '\t'
+	
+	code_edit.begin_complex_operation()
+	code_edit.delete_selection()
+	code_edit.insert_text_at_caret(char)
+	move_column(-1)
 	code_edit.end_complex_operation()
 
 
@@ -658,4 +571,23 @@ func cmd_paste(_args: Dictionary):
 	code_edit.end_complex_operation()
 	set_mode(Mode.NORMAL)
 
+func cmd_indent(args: Dictionary):
+	if args.get('forward', false):
+		code_edit.indent_lines()
+	else:
+		code_edit.unindent_lines()
+	set_mode(Mode.NORMAL)
+
+func cmd_comment(_args: Dictionary):
+	var l0: int = code_edit.get_selection_from_line()
+	var l1: int = code_edit.get_selection_to_line()
+	var do_comment: bool = !is_line_commented( mini(l0, l1) )
+	
+	code_edit.begin_complex_operation()
+	for line in range( mini(l0, l1), maxi(l0, l1) + 1 ):
+		set_line_commented(line, do_comment)
+	code_edit.end_complex_operation()
+	
+	if mode != Mode.NORMAL:
+		set_mode(Mode.NORMAL)
 
