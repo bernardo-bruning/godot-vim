@@ -223,59 +223,65 @@ func find_cmd(keys: Array[String], with_context: Mode) -> Dictionary:
 	# return { "type": Incomplete if partial else NotFound }
 	return { "type": Incomplete*int(partial) + NotFound*int(!partial) }
 
+func check(cmd: Dictionary):
+	return cmd.type == Incomplete or cmd.type == NotFound
 
-func execute(cmd: Dictionary):
-	if cmd.type == Incomplete or cmd.type == NotFound:
-		return
-	
-	# `if else` is faster than `match` (especially with small sets)
-	if cmd.type == Motion:
+func execute_operator_motionn(cmd: Dictionary):
+	if cmd.has('motion'):
 		if cmd.has('selected_char'):
 			cmd.motion.selected_char = cmd.selected_char
-		var pos: Vector2i = call_cmd(cmd.motion)
-		cursor.set_caret_pos(pos.y, pos.x)
+		operator_motion(cmd.operator, cmd.motion)
+	else:
+		call_cmd(cmd.operator)
+
+func execute_operator(cmd: Dictionary):
+	# print("[KeyMay::execute()] op: ", cmd) # DEBUG
+	if !cmd.has("modifier"): # Execute as-is
+		call_cmd(cmd.operator)
 		return
 	
-	if cmd.type == OperatorMotion:
-		if cmd.has('motion'):
-			if cmd.has('selected_char'):
-				cmd.motion.selected_char = cmd.selected_char
-			execute_operator_motion(cmd.operator, cmd.motion)
-		else:
-			call_cmd(cmd.operator)
+	var mod: Dictionary = cmd.modifier
+	# Execute with motion
+	if mod.type == Motion:
+		if mod.has('selected_char'):
+			mod.motion.selected_char = mod.selected_char
+		operator_motion(cmd.operator, mod.motion)
+	
+	# Execute with `line_wise = true` if repeating operations (e.g. dd, yy)
+	elif mod.type == Operator and mod.operator.type == cmd.operator.type:
+		var op_cmd: Dictionary = cmd.operator.duplicate()
+		op_cmd.line_wise = true
+		call_cmd(op_cmd)
+
+func execute_action(cmd: Dictionary):
+	if cmd.has('selected_char'):
+		cmd.action.selected_char = cmd.selected_char
+	call_cmd(cmd.action)
+
+func execute_motion(cmd: Dictionary):
+	if cmd.has('selected_char'):
+		cmd.motion.selected_char = cmd.selected_char
+	var pos: Vector2i = call_cmd(cmd.motion)
+	cursor.set_caret_pos(pos.y, pos.x)
+
+func execute(cmd: Dictionary):
+	if check(cmd):
 		return
 	
-	if cmd.type == Operator:
-		# print("[KeyMay::execute()] op: ", cmd) # DEBUG
-		if !cmd.has("modifier"): # Execute as-is
-			call_cmd(cmd.operator)
-			return
-		
-		var mod: Dictionary = cmd.modifier
-		# Execute with motion
-		if mod.type == Motion:
-			if mod.has('selected_char'):
-				mod.motion.selected_char = mod.selected_char
-			execute_operator_motion(cmd.operator, mod.motion)
-		
-		# Execute with `line_wise = true` if repeating operations (e.g. dd, yy)
-		elif mod.type == Operator and mod.operator.type == cmd.operator.type:
-			var op_cmd: Dictionary = cmd.operator.duplicate()
-			op_cmd.line_wise = true
-			call_cmd(op_cmd)
-		
-		return
-	
-	if cmd.type == Action:
-		if cmd.has('selected_char'):
-			cmd.action.selected_char = cmd.selected_char
-		call_cmd(cmd.action)
-		return
-	
-	push_error("[KeyMap::execute()] Unknown command type: %s" % cmd.type)
+	match cmd.type:
+		Motion:
+			execute_motion(cmd)
+		OperatorMotion:
+			execute_operator_motionn(cmd)
+		Operator:
+			execute_operator(cmd)
+		Action:
+			execute_action(cmd)
+		_ :
+			push_error("[KeyMap::execute()] Unknown command type: %s" % cmd.type)
 
 
-func execute_operator_motion(operator: Dictionary, motion: Dictionary):
+func operator_motion(operator: Dictionary, motion: Dictionary):
 	# print("[KeyMay::execute_operator_motion()] op = ", operator, ", motion = ", motion) # DEBUG
 
 	# Execute motion before operation
