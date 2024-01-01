@@ -226,7 +226,7 @@ func find_cmd(keys: Array[String], with_context: Mode) -> Dictionary:
 func check(cmd: Dictionary):
 	return cmd.type == Incomplete or cmd.type == NotFound
 
-func execute_operator_motionn(cmd: Dictionary):
+func execute_operator_motion(cmd: Dictionary):
 	if cmd.has('motion'):
 		if cmd.has('selected_char'):
 			cmd.motion.selected_char = cmd.selected_char
@@ -272,7 +272,7 @@ func execute(cmd: Dictionary):
 		Motion:
 			execute_motion(cmd)
 		OperatorMotion:
-			execute_operator_motionn(cmd)
+			execute_operator_motion(cmd)
 		Operator:
 			execute_operator(cmd)
 		Action:
