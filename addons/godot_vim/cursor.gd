@@ -94,40 +94,39 @@ func _input(event):
 	status_bar.display_text(key_map.get_input_stream_as_string())
 
 
-""" TODO Old commands we are yet to move (delete as they get implemented)
-func handle_input_stream(stream: String) -> String:
-	if stream == '.':
-		if globals.has('last_command'):
-			handle_input_stream(globals.last_command)
-			call_deferred(&'set_mode', Mode.NORMAL)
-		return ''
-	
-	
-	if stream.begins_with('m') and mode == Mode.NORMAL:
-		if stream.length() < 2: 	return stream
-		if !globals.has('marks'):	globals.marks = {}
-		var m: String = stream[1]
-		var unicode: int = m.unicode_at(0)
-		if (unicode < 65 or unicode > 90) and (unicode < 97 or unicode > 122):
-			status_bar.display_error('Marks must be between a-z or A-Z')
-			return ''
-		globals.marks[m] = {
-			'file' : globals.script_editor.get_current_script().resource_path,
-			'pos' : Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
-		}
-		status_bar.display_text('Mark "%s" set' % m, TEXT_DIRECTION_LTR)
-		return ''
-	if stream.begins_with('`'):
-		if stream.length() < 2: 	return stream
-		if !globals.has('marks'):	globals.marks = {}
-		if !globals.marks.has(stream[1]):
-			status_bar.display_error('Mark "%s" not set' % [ stream[1] ])
-			return ''
-		var mark: Dictionary = globals.marks[stream[1]]
-		globals.vim_plugin.edit_script(mark.file, mark.pos)
-		return ''
-	return ''
-"""
+## TODO Old commands we are yet to move (delete as they get implemented)
+# func handle_input_stream(stream: String) -> String:
+# 	if stream == '.':
+# 		if globals.has('last_command'):
+# 			handle_input_stream(globals.last_command)
+# 			call_deferred(&'set_mode', Mode.NORMAL)
+# 		return ''
+# 	
+# 	
+# 	if stream.begins_with('m') and mode == Mode.NORMAL:
+# 		if stream.length() < 2: 	return stream
+# 		if !globals.has('marks'):	globals.marks = {}
+# 		var m: String = stream[1]
+# 		var unicode: int = m.unicode_at(0)
+# 		if (unicode < 65 or unicode > 90) and (unicode < 97 or unicode > 122):
+# 			status_bar.display_error('Marks must be between a-z or A-Z')
+# 			return ''
+# 		globals.marks[m] = {
+# 			'file' : globals.script_editor.get_current_script().resource_path,
+# 			'pos' : Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
+# 		}
+# 		status_bar.display_text('Mark "%s" set' % m, TEXT_DIRECTION_LTR)
+# 		return ''
+# 	if stream.begins_with('`'):
+# 		if stream.length() < 2: 	return stream
+# 		if !globals.has('marks'):	globals.marks = {}
+# 		if !globals.marks.has(stream[1]):
+# 			status_bar.display_error('Mark "%s" not set' % [ stream[1] ])
+# 			return ''
+# 		var mark: Dictionary = globals.marks[stream[1]]
+# 		globals.vim_plugin.edit_script(mark.file, mark.pos)
+# 		return ''
+# 	return ''
 
 # Mostly used for commands like "w", "b", and "e"
 # Bitmask bits:
@@ -136,9 +135,8 @@ func handle_input_stream(stream: String) -> String:
 func get_word_edge_pos(from_line: int, from_col: int, forward: bool, word_end: bool, big_word: bool) -> Vector2i:
 	var search_dir: int = int(forward) - int(!forward) # 1 if forward else -1
 	var line: int = from_line
-	var col: int = from_col\
-		# Nudge it by (going backwards) + (word end ("e") or beginning ("b"))
-		+ search_dir * (int(!forward) + int(word_end == forward))
+	# Nudge it by (going backwards) + (word end ("e") or beginning ("b"))
+	var col: int = from_col + search_dir * (int(!forward) + int(word_end == forward))
 	# Cancel 1st bit (keywords) if big word so that keywords and normal chars are treated the same
 	var big_word_mask: int = 0b10 if big_word else 0b11
 	
