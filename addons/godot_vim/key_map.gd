@@ -4,6 +4,8 @@ class_name KeyMap extends RefCounted
 const Constants = preload("res://addons/godot_vim/constants.gd")
 const Mode = Constants.Mode
 
+const INSERT_MODE_TIMEOUT_MS: int = 700
+
 
 enum {
 	## Moves the cursor. Can be used in tandem with Operator
@@ -108,7 +110,6 @@ const key_map: Array[Dictionary] = [
 	{ "keys": ["g", "c"], "type": Operator, "operator": { "type": "comment" } },
 	
 	# ACTIONS
-	## TODO time interval between key presses
 	{ "keys": ["j", "k"], "type": Action, "context": Mode.INSERT, "action": {
 		"type": "normal",
 		"backspaces": 1,
@@ -148,6 +149,7 @@ enum KeyMatch {
 
 var input_stream: Array[String] = []
 var cursor: Control
+var last_insert_mode_input_ms: int = 0
 
 
 func _init(cursor_: Control):
@@ -155,13 +157,37 @@ func _init(cursor_: Control):
 	# key_map.make_read_only()
 
 
+## Returns whether the Insert mode input has timed out, in which case we
+## don't want to process it
+func handle_insert_mode_timeout() -> bool:
+	var current_tick_ms: int = Time.get_ticks_msec()
+	
+	if input_stream.is_empty():
+		last_insert_mode_input_ms = current_tick_ms
+		return false
+	
+	if current_tick_ms - last_insert_mode_input_ms > INSERT_MODE_TIMEOUT_MS:
+		last_insert_mode_input_ms = current_tick_ms
+		return true
+	last_insert_mode_input_ms = current_tick_ms
+	return false
+
+
 ## Returns: Dictionary with the found command: { "type": Motion or Operator or OperatorMotion or Action or Incomplete or NotFound, ... }
 ## Warning: the returned Dict can be empty in if the event wasn't processed
 func register_event(event: InputEventKey, with_context: Mode) -> Dictionary:
+	# Stringify event
 	var ch: String = event_to_char(event)
 	if ch.is_empty():	return {} # Invalid
 	if BLACKLIST.has(ch):	return {}
 	
+	# Handle Insert mode timeout
+	if with_context == Mode.INSERT:
+		if handle_insert_mode_timeout():
+			clear()
+			return {}
+	
+	# Process input stream
 	# print("[KeyMap::register_event()] ch = ", ch) # DEBUG
 	input_stream.append(ch)
 	var cmd: Dictionary = parse_keys(input_stream, with_context)
@@ -206,6 +232,7 @@ func find_cmd(keys: Array[String], with_context: Mode) -> Dictionary:
 	var is_visual: bool = with_context == Mode.VISUAL or with_context == Mode.VISUAL_LINE
 	
 	for cmd in key_map:
+		# FILTERS
 		# Don't allow anything in Insert mode unless specified
 		if with_context == Mode.INSERT and cmd.get("context", -1) != Mode.INSERT:
 			continue
