@@ -100,9 +100,22 @@ const key_map: Array[Dictionary] = [
 	
 	{ "keys": [">"], "type": Operator, "operator": { "type": "indent", "forward": true } },
 	{ "keys": ["<"], "type": Operator, "operator": { "type": "indent", "forward": false } },
+	
+	{ "keys": ["g", "c", "c"], "type": OperatorMotion,
+		"operator": { "type": "comment" },
+		"motion": { "type": "move_by_chars", "move_by": 1 }
+	},
 	{ "keys": ["g", "c"], "type": Operator, "operator": { "type": "comment" } },
 	
 	# ACTIONS
+	## TODO time interval between key presses
+	{ "keys": ["j", "k"], "type": Action, "context": Mode.INSERT, "action": {
+		"type": "normal",
+		"backspaces": 1,
+		"offset": 1
+	}},
+	# { "keys": ["<C-[>"], "type": Action, "context": Mode.INSERT, "action": { "type": "normal" } },
+	
 	{ "keys": ["i"], "type": Action, "action": { "type": "insert" } },
 	{ "keys": ["a"], "type": Action, "action": { "type": "insert", "offset": "after" } },
 	{ "keys": ["I"], "type": Action, "action": { "type": "insert", "offset": "bol" } },
@@ -193,6 +206,10 @@ func find_cmd(keys: Array[String], with_context: Mode) -> Dictionary:
 	var is_visual: bool = with_context == Mode.VISUAL or with_context == Mode.VISUAL_LINE
 	
 	for cmd in key_map:
+		# Don't allow anything in Insert mode unless specified
+		if with_context == Mode.INSERT and cmd.get("context", -1) != Mode.INSERT:
+			continue
+		
 		# OperatorMotions in visual mode aren't allowed
 		if cmd.type == OperatorMotion and is_visual:
 			continue
@@ -202,13 +219,13 @@ func find_cmd(keys: Array[String], with_context: Mode) -> Dictionary:
 			and !(cmd.has("context") and cursor.is_mode_visual(cmd.context)):
 			continue
 		
-		# Allow Operators to be executed as-is in visual mode
+		# Allow Operators to be executed as-is (without additional motion) in visual mode
 		if !(cmd.type == Operator and is_visual):
 			# Check context for other commands
 			if cmd.has("context") and with_context != cmd.context:
 				continue
 		
-		# Check keys
+		# CHECK KEYS
 		var m: KeyMatch = match_keys(cmd.keys, keys)
 		partial = partial or m == KeyMatch.Partial # Set/keep partial = true if it was a partial match
 		if m != KeyMatch.Full:
@@ -220,8 +237,8 @@ func find_cmd(keys: Array[String], with_context: Mode) -> Dictionary:
 		if cmd.keys[-1] == '{char}':
 			cmd_mut.selected_char = keys.back()
 		return cmd_mut
-	# return { "type": Incomplete if partial else NotFound }
-	return { "type": Incomplete*int(partial) + NotFound*int(!partial) }
+	
+	return { "type": Incomplete if partial else NotFound }
 
 func check(cmd: Dictionary):
 	return cmd.type == Incomplete or cmd.type == NotFound
@@ -309,6 +326,8 @@ static func event_to_char(event: InputEventKey) -> String:
 		return "<CR>"
 	if event.keycode == KEY_TAB:
 		return "<TAB>"
+	if event.keycode == KEY_ESCAPE:
+		return "<ESC>"
 	
 	# Ctrl + key
 	if event.is_command_or_control_pressed():

@@ -41,56 +41,28 @@ func focus_entered():
 
 
 func reset_normal():
-	code_edit.cancel_code_completion()
-	key_map.clear()
 	set_mode(Mode.NORMAL)
 	selection_from = Vector2i.ZERO
 	selection_to = Vector2i.ZERO
 	set_column(code_edit.get_caret_column())
-	return
 
 
-## Returns whether to return to Normal mode
-func back_to_normal_mode(event: InputEvent, m: Mode) -> bool:
-	# Esc
+func _input(event: InputEvent):
 	if Input.is_key_pressed(KEY_ESCAPE):
 		reset_normal()
-		return true
-	
-	# jk
-	if m == Mode.INSERT:
-		var old_time: int = Time.get_ticks_msec()
-		if !Input.is_key_label_pressed(KEY_J):
-			return false
-		
-		if !Time.get_ticks_msec() - old_time < 700 or !Input.is_key_label_pressed(KEY_K):
-			return false
-		
-		code_edit.backspace()
-		code_edit.cancel_code_completion()
-		reset_normal()
-		move_column(+1)
-		return true
-	return false
-
-
-func _input(event):
-	if back_to_normal_mode(event, mode):
-		code_edit.cancel_code_completion()
 		return
 	
 	draw_cursor()
-	if !has_focus():	return
+	
+	# if !has_focus():	return
+	if !has_focus() and mode != Mode.INSERT:	return
 	if !event is InputEventKey:	return
 	if !event.pressed:	return
-	if mode == Mode.INSERT or mode == Mode.COMMAND:	return
-
-	if event.keycode == KEY_ESCAPE:
-		key_map.clear()
+	if mode == Mode.COMMAND:
 		return
 	
 	# See KeyMap.key_map, KeyMap.register_event()
-	var cmd: Dictionary = key_map.register_event(event, mode)
+	var _registered_cmd: Dictionary = key_map.register_event(event, mode)
 	status_bar.display_text(key_map.get_input_stream_as_string())
 
 
@@ -214,6 +186,9 @@ func set_mode(m: int):
 	command_line.close()
 	match mode:
 		Mode.NORMAL:
+			code_edit.cancel_code_completion()
+			key_map.clear()
+			
 			code_edit.remove_secondary_carets() # Secondary carets are used when searching with '/' (See command_line.gd)
 			code_edit.deselect()
 			code_edit.release_focus()
@@ -346,12 +321,9 @@ func draw_cursor():
 	code_edit.select(line, column, line, column+1)
 
 
+#region COMMANDS
 
-# ------------------------------------------------------------------------------
-# * COMMANDS *
-# ------------------------------------------------------------------------------
-
-# MOTIONS ----------------------------------------------------------------------
+#region MOTIONS
 # Motion commands must return a Vector2i with the cursor's new position
 
 func cmd_move_by_chars(args: Dictionary) -> Vector2i:
@@ -445,8 +417,9 @@ func cmd_find_in_line_again(args_mut: Dictionary) -> Vector2i:
 		return Vector2i(col, line)
 	return Vector2i(get_column(), line)
 
+#endregion
 
-# ACTIONS ----------------------------------------------------------------------
+#region ACTIONS
 
 func cmd_insert(args: Dictionary):
 	set_mode(Mode.INSERT)
@@ -472,11 +445,38 @@ func cmd_insert(args: Dictionary):
 		set_column(ind)
 		set_mode(Mode.INSERT)
 
+## Options for args:
+## - (optional) "backspaces" : int -> Number of times to backspace (e.g. once with 'jk')
+## - (optional) "offset" : int -> How many colums (x) to move the caret
+func cmd_normal(args: Dictionary):
+	for __ in args.get("backspaces", 0):
+		code_edit.backspace()
+	reset_normal()
+	if args.has("offset"):
+		move_column( args.offset )
+
 func cmd_visual(args: Dictionary):
 	if args.get('line_wise', false):
 		set_mode(Mode.VISUAL_LINE)
 	else:
 		set_mode(Mode.VISUAL)
+
+## Switches the current mode to NORMAL mode
+## Switches the current mode to COMMAND mode
+## Options for args:
+## - Empty -> Enter command mode normally
+## - { "command" : "[cmd]" } -> Enter command mode with the command "[cmd]" already typed in
+func cmd_command(args: Dictionary):
+	set_mode(Mode.COMMAND)
+	if args.has("command"):
+		command_line.set_command(args.command)
+	else:
+		command_line.set_command(":")
+
+## Short for `cmd_command({ "command" : "/" })`
+func cmd_search(_args: Dictionary):
+	set_mode(Mode.COMMAND)
+	command_line.set_command('/')
 
 func cmd_undo(_args: Dictionary):
 	code_edit.undo()
@@ -486,14 +486,6 @@ func cmd_redo(_args: Dictionary):
 	code_edit.redo()
 	if mode != Mode.NORMAL:
 		set_mode(Mode.NORMAL)
-
-func cmd_command(_args: Dictionary):
-	set_mode(Mode.COMMAND)
-	command_line.set_command(':')
-
-func cmd_search(_args: Dictionary):
-	set_mode(Mode.COMMAND)
-	command_line.set_command('/')
 
 func cmd_join(_args: Dictionary):
 	var line: int = code_edit.get_caret_line()
@@ -521,7 +513,9 @@ func cmd_replace(args: Dictionary):
 	code_edit.end_complex_operation()
 
 
-# OPERATIONS ----------------------------------------------------------------------
+#endregion
+
+#region OPERATIONS
 
 func cmd_delete(args: Dictionary):
 	if args.get('line_wise', false):
@@ -589,3 +583,6 @@ func cmd_comment(_args: Dictionary):
 	if mode != Mode.NORMAL:
 		set_mode(Mode.NORMAL)
 
+#endregion
+
+#endregion

@@ -1,4 +1,10 @@
-enum Mode { NORMAL, INSERT, VISUAL, VISUAL_LINE, COMMAND }
+enum Mode {
+	NORMAL = 0,
+	INSERT,
+	VISUAL,
+	VISUAL_LINE,
+	COMMAND
+}
 
 # Used for commands like "w" "b" and "e" respectively
 enum WordEdgeMode { WORD, BEGINNING, END }
