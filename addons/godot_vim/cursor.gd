@@ -325,12 +325,28 @@ func draw_cursor():
 #region MOTIONS
 # Motion commands must return a Vector2i with the cursor's new position
 
+## Moves the cursor horizontally
+## Args:
+## - "move_by": int
+##		How many characters to move by
 func cmd_move_by_chars(args: Dictionary) -> Vector2i:
 	return Vector2i(get_column() + args.get("move_by", 0), get_line())
 
+## Moves the cursor vertically
+## Args:
+## - "move_by": int
+##		How many lines to move by
 func cmd_move_by_lines(args: Dictionary) -> Vector2i:
 	return Vector2i(get_column(), get_line() + args.get("move_by", 0))
 
+## Moves the cursor by word
+## Args:
+## - "forward": bool
+##		Whether to move forwards (right) or backwards (left)
+## - "word_end": bool
+##		Whether to move to the end of a word
+## - "big_word": bool
+##		Whether to ignore keywords like ";", ",", "." (See KEYWORDS in constants.gd)
 func cmd_move_by_word(args: Dictionary) -> Vector2i:
 	return get_word_edge_pos(
 		get_line(),
@@ -340,25 +356,44 @@ func cmd_move_by_word(args: Dictionary) -> Vector2i:
 		args.get("big_word", false)
 	)
 
+## Moves the cursor by paragraph
+## Args:
+## - "forward": bool
+##		Whether to move forward (down) or backward (up)
 func cmd_move_by_paragraph(args: Dictionary) -> Vector2i:
 	var para_edge: Vector2i = get_paragraph_edge_pos(get_line(), args.get('forward', false))
 	return para_edge
 
-func cmd_move_to_bol(args: Dictionary) -> Vector2i:
+## Moves the cursor to the start of the line
+## This is the VIM equivalent of "0"
+func cmd_move_to_bol(_args: Dictionary) -> Vector2i:
 	return Vector2i(0, get_line())
 
+## Moves the cursor to the end of the line
+## This is the VIM equivalent of "$"
 func cmd_move_to_eol(args: Dictionary) -> Vector2i:
 	return Vector2i(get_line_length(), get_line())
 
+## Moves the cursor to the first non-whitespace character in the current line
+## This is the VIM equivalent of "^"
 func cmd_move_to_first_non_whitespace_char(args: Dictionary) -> Vector2i:
 	return Vector2i(code_edit.get_first_non_whitespace_column(get_line()), get_line())
 
+## Moves the cursor to the start of the file
+## This is the VIM equivalent of "gg"
 func cmd_move_to_bof(args: Dictionary) -> Vector2i:
 	return Vector2i(0, 0)
 
+## Moves the cursor to the end of the file
+## This is the VIM equivalent of "G"
 func cmd_move_to_eof(args: Dictionary) -> Vector2i:
 	return Vector2i(0, code_edit.get_line_count())
 
+## Repeats the last '/' search
+## This is the VIM equivalent of "n" and "N"
+## Args:
+## - "forward": bool
+##		Whether to search down (true) or up (false)
 func cmd_find_again(args: Dictionary) -> Vector2i:
 	if command_line.search_pattern.is_empty():
 		return get_caret_pos()
@@ -381,6 +416,15 @@ func cmd_find_again(args: Dictionary) -> Vector2i:
 		return get_caret_pos()
 	return globals.vim_plugin.idx_to_pos(code_edit, rmatch.get_start())
 
+## Jumps to a character in the current line
+## This is the VIM equivalent of f, F, t, ant T
+## Args:
+## - "selected_char": String
+##		The character to look for
+## - "forward": bool
+##		Whether to search right (true) or left (false)
+## - "stop_before": bool
+##		Whether to stop before [selected_char]
 func cmd_find_in_line(args: Dictionary) -> Vector2i:
 	var line: int = get_line()
 	var col: int = find_char_in_line(
@@ -397,8 +441,15 @@ func cmd_find_in_line(args: Dictionary) -> Vector2i:
 		return Vector2i(col, line)
 	return Vector2i(get_column(), line)
 
-# 'mut' ('mutable') because 'args' will be changed
+## Repeats the last inline search
+## This is the VIM equivalent of ";" and ","
+## Args:
+## - "invert": bool
+##		Whether search in the opposite direction of the last search
 func cmd_find_in_line_again(args_mut: Dictionary) -> Vector2i:
+	# 'mut' ('mutable') because 'args' will be changed
+	# The reason for that is because the arg 'inclusive' is dependant on the last search
+	# and will be used with Operators
 	if !globals.has('last_search'):	return get_caret_pos()
 	
 	var last_search: Dictionary = globals.last_search
@@ -420,6 +471,10 @@ func cmd_find_in_line_again(args_mut: Dictionary) -> Vector2i:
 
 #region ACTIONS
 
+## Enters Insert mode
+## Args:
+## - (optional) "offset": String
+##		Either of  "after", "bol", "eol", "new_line_below", "new_line_above", or "in_place" (default)
 func cmd_insert(args: Dictionary):
 	set_mode(Mode.INSERT)
 	var offset: String = args.get("offset", "in_place")
@@ -445,9 +500,11 @@ func cmd_insert(args: Dictionary):
 		set_mode(Mode.INSERT)
 
 ## Switches to Normal mode
-## Options for args:
-## - (optional) "backspaces" : int -> Number of times to backspace (e.g. once with 'jk')
-## - (optional) "offset" : int -> How many colums (x) to move the caret
+## Args:
+## - (optional) "backspaces" : int
+##		Number of times to backspace (e.g. once with 'jk')
+## - (optional) "offset" : int
+##		How many colums to move the caret
 func cmd_normal(args: Dictionary):
 	for __ in args.get("backspaces", 0):
 		code_edit.backspace()
@@ -463,9 +520,8 @@ func cmd_visual(args: Dictionary):
 	else:
 		set_mode(Mode.VISUAL)
 
-## Switches the current mode to NORMAL mode
 ## Switches the current mode to COMMAND mode
-## Options for args:
+## Args:
 ## - Empty -> Enter command mode normally
 ## - { "command" : "[cmd]" } -> Enter command mode with the command "[cmd]" already typed in
 func cmd_command(args: Dictionary):
@@ -475,6 +531,7 @@ func cmd_command(args: Dictionary):
 	else:
 		command_line.set_command(":")
 
+## Search for a pattern within the current file
 ## Short for `cmd_command({ "command" : "/" })`
 func cmd_search(_args: Dictionary):
 	set_mode(Mode.COMMAND)
@@ -499,12 +556,14 @@ func cmd_join(_args: Dictionary):
 	code_edit.insert_text_at_caret(' ')
 	code_edit.end_complex_operation()
 
+## Centers the cursor on the screen
 func cmd_center_caret(_args: Dictionary):
 	code_edit.center_viewport_to_caret()
 
-## Replace the current character with 'selected_char'
+## Replace the current character with [selected_char]
 ## Args:
-## - "selected_char": char as is processed in KeyMap::event_to_string()
+## - "selected_char": String
+##		as is processed in KeyMap::event_to_string()
 func cmd_replace(args: Dictionary):
 	var char: String = args.get('selected_char', '')
 	if char.begins_with('<CR>'):

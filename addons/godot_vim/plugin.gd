@@ -21,6 +21,9 @@ func _enter_tree():
 	if get_code_edit() != null:
 		_load()
 	get_editor_interface().get_script_editor().connect("editor_script_changed", _script_changed)
+	
+	print("[Godot VIM] Initialized.")
+	print("    If you wish to set keybindings, please see the map() function in key_map.gd")
 
 func _script_changed(script: Script):
 	# Add to recent files

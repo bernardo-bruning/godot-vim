@@ -1,39 +1,54 @@
 class_name KeyMap extends RefCounted
 ## Hanldes input stream and key mapping
+##
+## You may also set your keybindings in the [method map] function
 
-
-## SET YOUR KEYBINDINGS HERE
+## * SET YOUR KEYBINDINGS HERE *
 ## Also see the "COMMANDS" section at the bottom of cursor.gd
 ##  E.g. the command for
 ##    KeyRemap.new(...) .motion("foo", { "bar": 1 })
 ##  is handled in Cursor::cmd_foo(args: Dictionary)
 ##  where `args` is  `{ "type": "foo", "bar": 1 }`
+## Example:
+## [codeblock]
+## return [
+## 	# Move 5 characters to the right with "L"
+## 	KeyRemap.new([ "L" ])
+## 		.motion("move_by_chars", { "move_by": 5 }),
+## 	
+## 	# Make "q" the same as "d" (delete operator)
+## 	KeyRemap.new([ "q" ])
+## 		.operator("delete"),
+## 	
+## 	# Delete this line along with the next two with "Z"
+## 	# .operator() and .motion() automatically merge together
+## 	KeyRemap.new([ "Z" ])
+## 		.operator("delete")
+## 		.motion("move_by_lines", { "move_by": 2, "line_wise": true }),
+## 	
+## 	# In Insert mode, return to Normal mode with "Ctrl-["
+## 	KeyRemap.new([ "<C-[>" ])
+## 		.action("normal")
+## 		.with_context(Mode.INSERT),
+## 	
+## 	# In Insert mode, return to Normal mode with "jk"
+## 	KeyRemap.new([ "j", "k" ])
+## 		.action("normal", { "backspaces": 1, "offset": 1 })
+## 		.with_context(Mode.INSERT),
+## ]
+## [/codeblock]
 static func map() -> Array[KeyRemap]:
-	# Example set:
+	# Example:
 	return [
-		# Move 5 characters to the right with "L"
-		KeyRemap.new([ "L" ])
-			.motion("move_by_chars", { "move_by": 5 }),
-		
-		# Make "q" the same as "d" (delete operator)
-		KeyRemap.new([ "q" ])
-			.operator("delete"),
-		
-		# Delete this line along with the next two with "Z"
-		# .operator() and .motion() automatically merge together
-		KeyRemap.new([ "Z" ])
-			.operator("delete")
-			.motion("move_by_lines", { "move_by": 2, "line_wise": true }),
-		
-		# In Insert mode, return to Normal mode with "Ctrl-["
-		KeyRemap.new([ "<C-[>" ])
-			.action("normal")
-			.with_context(Mode.INSERT),
-		
 		# In Insert mode, return to Normal mode with "jk"
 		KeyRemap.new([ "j", "k" ])
 			.action("normal", { "backspaces": 1, "offset": 1 })
 			.with_context(Mode.INSERT),
+		
+		# In Insert mode, return to Normal mode with "Ctrl-["
+		# KeyRemap.new([ "<C-[>" ])
+			# .action("normal")
+			# .with_context(Mode.INSERT),
 	]
 
 
