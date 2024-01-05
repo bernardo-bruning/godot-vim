@@ -4,7 +4,6 @@ const CommandLine = preload("res://addons/godot_vim/command_line.gd")
 const StatusBar = preload("res://addons/godot_vim/status_bar.gd")
 const Constants = preload("res://addons/godot_vim/constants.gd")
 const Mode = Constants.Mode
-const WordEdgeMode = Constants.WordEdgeMode
 const KEYWORDS = Constants.KEYWORDS
 const SPACES = Constants.SPACES
 
@@ -186,7 +185,7 @@ func set_mode(m: int):
 	command_line.close()
 	match mode:
 		Mode.NORMAL:
-			code_edit.cancel_code_completion()
+			code_edit.call_deferred("cancel_code_completion")
 			key_map.clear()
 			
 			code_edit.remove_secondary_carets() # Secondary carets are used when searching with '/' (See command_line.gd)
@@ -445,6 +444,7 @@ func cmd_insert(args: Dictionary):
 		set_column(ind)
 		set_mode(Mode.INSERT)
 
+## Switches to Normal mode
 ## Options for args:
 ## - (optional) "backspaces" : int -> Number of times to backspace (e.g. once with 'jk')
 ## - (optional) "offset" : int -> How many colums (x) to move the caret
@@ -455,6 +455,8 @@ func cmd_normal(args: Dictionary):
 	if args.has("offset"):
 		move_column( args.offset )
 
+## Switches to Visual mode
+## if "line_wise" (optional) is true, it will switch to VisualLine instead
 func cmd_visual(args: Dictionary):
 	if args.get('line_wise', false):
 		set_mode(Mode.VISUAL_LINE)
@@ -487,6 +489,7 @@ func cmd_redo(_args: Dictionary):
 	if mode != Mode.NORMAL:
 		set_mode(Mode.NORMAL)
 
+## Join the current line with the next one
 func cmd_join(_args: Dictionary):
 	var line: int = code_edit.get_caret_line()
 	code_edit.begin_complex_operation()
@@ -499,6 +502,9 @@ func cmd_join(_args: Dictionary):
 func cmd_center_caret(_args: Dictionary):
 	code_edit.center_viewport_to_caret()
 
+## Replace the current character with 'selected_char'
+## Args:
+## - "selected_char": char as is processed in KeyMap::event_to_string()
 func cmd_replace(args: Dictionary):
 	var char: String = args.get('selected_char', '')
 	if char.begins_with('<CR>'):
@@ -517,6 +523,8 @@ func cmd_replace(args: Dictionary):
 
 #region OPERATIONS
 
+## Delete a selection
+## Corresponds to "d" in regular VIM
 func cmd_delete(args: Dictionary):
 	if args.get('line_wise', false):
 		var l0: int = code_edit.get_selection_from_line()
@@ -528,6 +536,8 @@ func cmd_delete(args: Dictionary):
 	if mode != Mode.NORMAL:
 		set_mode(Mode.NORMAL)
 
+## Copies (yanks) a selection
+## Corresponds to "y" in regular VIM
 func cmd_yank(args: Dictionary):
 	if args.get('line_wise', false):
 		var l0: int = code_edit.get_selection_from_line()
@@ -539,6 +549,8 @@ func cmd_yank(args: Dictionary):
 	if mode != Mode.NORMAL:
 		set_mode(Mode.NORMAL)
 
+## Changes a selection
+## Corresponds to "c" in regular VIM
 func cmd_change(args: Dictionary):
 	if args.get('line_wise', false):
 		var l0: int = code_edit.get_selection_from_line()
@@ -563,6 +575,10 @@ func cmd_paste(_args: Dictionary):
 	code_edit.end_complex_operation()
 	set_mode(Mode.NORMAL)
 
+## Indents or unindents the selected line(s) by 1 level
+## Corresponds to >> or << in regular VIM
+## Args:
+## - (optional) "forward": whether to indent *in*. Defaults to false
 func cmd_indent(args: Dictionary):
 	if args.get('forward', false):
 		code_edit.indent_lines()
@@ -570,6 +586,7 @@ func cmd_indent(args: Dictionary):
 		code_edit.unindent_lines()
 	set_mode(Mode.NORMAL)
 
+## Toggles whether the selected line(s) are commented
 func cmd_comment(_args: Dictionary):
 	var l0: int = code_edit.get_selection_from_line()
 	var l1: int = code_edit.get_selection_to_line()
