@@ -16,7 +16,12 @@ class_name KeyMap extends RefCounted
 ## 	KeyRemap.new([ "L" ])
 ## 		.motion("move_by_chars", { "move_by": 5 }),
 ## 	
-## 	# Make "q" the same as "d" (delete operator)
+## 	# Let's remove "d" (the delete operator) and replace it with "q"
+## 	# You may additionally specify the type and context of the cmd to remove
+##  # using .operator() (or .motion() or .action() etc...) and .with_context()
+## 	KeyRemap.new([ "d" ])
+##      .remove(),
+##  # "q" is now the new delete operator
 ## 	KeyRemap.new([ "q" ])
 ## 		.operator("delete"),
 ## 	
@@ -416,7 +421,7 @@ static func match_keys(expected_keys: Array, input_keys: Array) -> KeyMatch:
 		# Cases with operators like "dj", "ce"
 		elif input_keys.slice(0, expected_keys.size()) == expected_keys and input_keys.size() > expected_keys.size():
 			return KeyMatch.Full
-		
+	
 	return KeyMatch.None
 
 ## Clears the input stream
@@ -443,8 +448,10 @@ func handle_insert_mode_timeout() -> bool:
 
 
 func apply_remaps(map: Array[KeyRemap]):
+	if map.is_empty():
+		return
+	print('[Godot VIM] Applying keybind remaps...')
 	for remap in map:
-		key_map.append( remap.as_dict() )
-		# key_map.insert(0, remap.as_dict())
+		remap.apply(key_map)
 
 

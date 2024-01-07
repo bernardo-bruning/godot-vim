@@ -21,14 +21,9 @@ func _init():
 	set_focus_mode(FOCUS_ALL)
 
 func _ready():
-	key_map = KeyMap.new(self)
-	
 	code_edit.connect("focus_entered", focus_entered)
 	code_edit.connect("caret_changed", cursor_changed)
 	call_deferred('set_mode', Mode.NORMAL)
-
-func _exit_tree():
-	key_map = null
 
 func cursor_changed():
 	draw_cursor()
@@ -474,7 +469,13 @@ func cmd_find_in_line_again(args_mut: Dictionary) -> Vector2i:
 ## Enters Insert mode
 ## Args:
 ## - (optional) "offset": String
-##		Either of  "after", "bol", "eol", "new_line_below", "new_line_above", or "in_place" (default)
+##		Either of:
+##		"after": Enter insert mode after the selected character (VIM equivalent: a)
+##		"bol": Enter insert mode at the beginning of this line (VIM equivalent: I)
+##		"eol": Enter insert mode at the end of this line (VIM equivalent: A)
+##		"new_line_below": Insert at a new line below (VIM equivalent: o)
+##		"new_line_above": Insert at a new line above (VIM equivalent: O)
+##	defaults to "in_place": Enter insert mode before the selected character (VIM equivalent: i)
 func cmd_insert(args: Dictionary):
 	set_mode(Mode.INSERT)
 	var offset: String = args.get("offset", "in_place")
@@ -656,8 +657,7 @@ func cmd_comment(_args: Dictionary):
 		set_line_commented(line, do_comment)
 	code_edit.end_complex_operation()
 	
-	if mode != Mode.NORMAL:
-		set_mode(Mode.NORMAL)
+	set_mode(Mode.NORMAL)
 
 #endregion
 

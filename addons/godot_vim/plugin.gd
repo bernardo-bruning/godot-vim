@@ -10,20 +10,25 @@ const Cursor = preload("res://addons/godot_vim/cursor.gd")
 const Dispatcher = preload("res://addons/godot_vim/dispatcher.gd")
 
 var cursor: Cursor
+var key_map: KeyMap
 var command_line: CommandLine
 var status_bar: StatusBar
 var globals: Dictionary = {}
 var dispatcher: Dispatcher
 
 func _enter_tree():
-	globals = {}
-	
-	if get_code_edit() != null:
-		_load()
 	get_editor_interface().get_script_editor().connect("editor_script_changed", _script_changed)
+	globals = {}
+	initialize(true)
+
+
+func initialize(forced: bool = false):
+	if get_code_edit() != null:
+		_load(forced)
 	
 	print("[Godot VIM] Initialized.")
 	print("    If you wish to set keybindings, please see the map() function in key_map.gd")
+
 
 func _script_changed(script: Script):
 	# Add to recent files
@@ -50,7 +55,7 @@ func edit_script(path: String, pos: Vector2i):
 	cursor.call_deferred('set_caret_pos', pos.y, pos.x)
 
 
-func _load():
+func _load(forced: bool = false):
 	if globals == null:
 		globals = {}
 	
@@ -62,6 +67,13 @@ func _load():
 	code_edit.select(code_edit.get_caret_line(), code_edit.get_caret_column(), code_edit.get_caret_line(), code_edit.get_caret_column()+1)
 	cursor.code_edit = code_edit
 	cursor.globals = globals
+	
+	# KeyMap
+	if key_map == null or forced:
+		key_map = KeyMap.new(cursor)
+	else:
+		key_map.cursor = cursor
+	cursor.key_map = key_map
 	
 	# Command line
 	if command_line != null:
@@ -94,6 +106,8 @@ func _load():
 	globals.cursor = cursor
 	globals.script_editor = script_editor
 	globals.vim_plugin = self
+	globals.key_map = key_map
+	
 	script_editor_base.add_child(cursor)
 	script_editor_base.add_child(status_bar)
 	script_editor_base.add_child(command_line)
