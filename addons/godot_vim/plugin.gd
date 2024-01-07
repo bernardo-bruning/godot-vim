@@ -17,7 +17,7 @@ var globals: Dictionary = {}
 var dispatcher: Dispatcher
 
 func _enter_tree():
-	get_editor_interface().get_script_editor().connect("editor_script_changed", _script_changed)
+	EditorInterface.get_script_editor().connect("editor_script_changed", _script_changed)
 	globals = {}
 	initialize(true)
 
@@ -27,7 +27,7 @@ func initialize(forced: bool = false):
 		_load(forced)
 	
 	print("[Godot VIM] Initialized.")
-	print("    If you wish to set keybindings, please see the map() function in key_map.gd")
+	print("    If you wish to set keybindings, please run :remap in the command line")
 
 
 func _script_changed(script: Script):
@@ -47,11 +47,10 @@ func _script_changed(script: Script):
 
 func edit_script(path: String, pos: Vector2i):
 	var script = load(path)
-	var editor_interface: EditorInterface = globals.editor_interface
 	if script == null:
 		status_bar.display_error('Could not open file "%s"' % path)
 		return ''
-	editor_interface.edit_script(script)
+	EditorInterface.edit_script(script)
 	cursor.call_deferred('set_caret_pos', pos.y, pos.x)
 
 
@@ -92,14 +91,11 @@ func _load(forced: bool = false):
 	cursor.status_bar = status_bar
 	command_line.status_bar = status_bar
 	
-	var editor_interface = get_editor_interface()
-	if editor_interface == null:	return
-	var script_editor = editor_interface.get_script_editor()
+	var script_editor = EditorInterface.get_script_editor()
 	if script_editor == null:	return
 	var script_editor_base = script_editor.get_current_editor()
 	if script_editor_base == null:	return
 	
-	globals.editor_interface = editor_interface
 	globals.command_line = command_line
 	globals.status_bar = status_bar
 	globals.code_edit = code_edit
@@ -119,7 +115,7 @@ func dispatch(command: String):
 	return dispatcher.dispatch(command)
 
 func get_code_edit():
-	var editor = get_editor_interface().get_script_editor().get_current_editor()
+	var editor = EditorInterface.get_script_editor().get_current_editor()
 	return _select(editor, ['VSplitContainer', 'CodeTextEditor', 'CodeEdit'])
 
 func _select(obj: Node, types: Array[String]): # ???

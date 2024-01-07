@@ -7,6 +7,7 @@ var handlers = {
 	"moveline": preload("res://addons/godot_vim/commands/moveline.gd"),
 	"movecolumn": preload("res://addons/godot_vim/commands/movecolumn.gd"),
 	"reload": preload("res://addons/godot_vim/commands/reload.gd"),
+	"remap": preload("res://addons/godot_vim/commands/remap.gd"),
 }
 
 var globals: Dictionary

@@ -1,6 +1,3 @@
-const Contants = preload("res://addons/godot_vim/constants.gd")
-const StatusBar = preload("res://addons/godot_vim/status_bar.gd")
-const Mode = Contants.Mode
 
 func execute(api: Dictionary, _args):
 	print("[Godot VIM] Reloading...")
