@@ -1,5 +1,8 @@
 class_name KeyRemap extends RefCounted
 
+# TODO Configure via JSON file or Project Settings (if feasible)
+
+
 const Constants = preload("res://addons/godot_vim/constants.gd")
 const Mode = Constants.Mode
 
@@ -83,13 +86,13 @@ func apply(key_map: Array[Dictionary]):
 			key_map.append(inner)
 		
 		ApplyMode.PREPEND:
-			var err: Error = key_map.insert(0, inner)
+			var err: int = key_map.insert(0, inner)
 			if err != OK:
 				push_error("[Godot VIM] Failed to prepend keybind: %s" % error_string(err))
 		
 		ApplyMode.INSERT:
 			var index: int = options.get("index", 0)
-			var err: Error = key_map.insert(index, inner)
+			var err: int = key_map.insert(index, inner)
 			if err != OK:
 				push_error("[Godot VIM] Failed to insert keybind at index %s: %s" % [ index, error_string(err) ])
 		

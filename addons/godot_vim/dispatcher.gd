@@ -12,7 +12,8 @@ var handlers = {
 
 var globals: Dictionary
 
-func dispatch(command : String) -> Error:
+## Returns [enum @GlobalScope.Error]
+func dispatch(command : String) -> int:
 	var command_idx_end: int = command.find(' ', 1)
 	if command_idx_end == -1: command_idx_end = command.length()
 	var handler_name: String = command.substr(1, command_idx_end-1)

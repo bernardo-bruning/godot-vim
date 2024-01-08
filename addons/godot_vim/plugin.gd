@@ -31,15 +31,22 @@ func initialize(forced: bool = false):
 
 
 func _script_changed(script: Script):
+	if !script:
+		return
+	
 	# Add to recent files
-	var path: String = script.resource_path
 	var marks: Dictionary = globals.get('marks', {})
 	for i in range(9, -1, -1):
 		var m: String = str(i)
-		var pm: String = str(i - 1)
-		if !marks.has(pm):
+		var prev_m: String = str(i - 1)
+		if !marks.has(prev_m):
 			continue
-		marks[m] = marks[pm]
+		marks[m] = marks[prev_m]
+	
+	# Mark "-1" won't be accessible to the user
+	# It's just the current file, and will be indexed next time the
+	# loop above ^^^ is called
+	var path: String = script.resource_path
 	marks['-1'] = { 'file' : path, 'pos' : Vector2i(-1, 0) }
 	
 	_load()
@@ -50,8 +57,7 @@ func edit_script(path: String, pos: Vector2i):
 	if script == null:
 		status_bar.display_error('Could not open file "%s"' % path)
 		return ''
-	EditorInterface.edit_script(script)
-	cursor.call_deferred('set_caret_pos', pos.y, pos.x)
+	EditorInterface.edit_script(script, pos.y, pos.x)
 
 
 func _load(forced: bool = false):

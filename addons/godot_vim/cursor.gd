@@ -44,11 +44,11 @@ func reset_normal():
 func _input(event: InputEvent):
 	if Input.is_key_pressed(KEY_ESCAPE):
 		reset_normal()
+		status_bar.clear()
 		return
 	
 	draw_cursor()
 	
-	# if !has_focus():	return
 	if !has_focus() and mode != Mode.INSERT:	return
 	if !event is InputEventKey:	return
 	if !event.pressed:	return
@@ -56,8 +56,15 @@ func _input(event: InputEvent):
 		return
 	
 	# See KeyMap.key_map, KeyMap.register_event()
-	var _registered_cmd: Dictionary = key_map.register_event(event, mode)
-	status_bar.display_text(key_map.get_input_stream_as_string())
+	var registered_cmd: Dictionary = key_map.register_event(event, mode)
+	
+	if mode == Mode.NORMAL or is_mode_visual(mode):
+		status_bar.set_keys_text(key_map.get_input_stream_as_string())
+	else:
+		status_bar.clear_keys()
+	
+	if KeyMap.is_cmd_valid(registered_cmd):
+		code_edit.cancel_code_completion()
 
 
 ## TODO Old commands we are yet to move (delete as they get implemented)
@@ -67,32 +74,8 @@ func _input(event: InputEvent):
 # 			handle_input_stream(globals.last_command)
 # 			call_deferred(&'set_mode', Mode.NORMAL)
 # 		return ''
-# 	
-# 	
-# 	if stream.begins_with('m') and mode == Mode.NORMAL:
-# 		if stream.length() < 2: 	return stream
-# 		if !globals.has('marks'):	globals.marks = {}
-# 		var m: String = stream[1]
-# 		var unicode: int = m.unicode_at(0)
-# 		if (unicode < 65 or unicode > 90) and (unicode < 97 or unicode > 122):
-# 			status_bar.display_error('Marks must be between a-z or A-Z')
-# 			return ''
-# 		globals.marks[m] = {
-# 			'file' : globals.script_editor.get_current_script().resource_path,
-# 			'pos' : Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
-# 		}
-# 		status_bar.display_text('Mark "%s" set' % m, TEXT_DIRECTION_LTR)
-# 		return ''
-# 	if stream.begins_with('`'):
-# 		if stream.length() < 2: 	return stream
-# 		if !globals.has('marks'):	globals.marks = {}
-# 		if !globals.marks.has(stream[1]):
-# 			status_bar.display_error('Mark "%s" not set' % [ stream[1] ])
-# 			return ''
-# 		var mark: Dictionary = globals.marks[stream[1]]
-# 		globals.vim_plugin.edit_script(mark.file, mark.pos)
-# 		return ''
 # 	return ''
+
 
 # Mostly used for commands like "w", "b", and "e"
 # Bitmask bits:
@@ -578,6 +561,39 @@ func cmd_replace(args: Dictionary):
 	move_column(-1)
 	code_edit.end_complex_operation()
 
+## For now, all marks are global
+func cmd_mark(args: Dictionary):
+	if !args.has("selected_char"):
+		push_error("[GodotVIM] Error on cmd_mark(): No char selected")
+		return
+	
+	if !globals.has("marks"):
+		globals.marks = {}
+	var m: String = args.selected_char
+	var unicode: int = m.unicode_at(0)
+	if (unicode < 65 or unicode > 90) and (unicode < 97 or unicode > 122):
+		# We use call_deferred because otherwise, the error gets overwritten at the end of _input()
+		status_bar.call_deferred(&"display_error", "Marks must be between a-z or A-Z")
+		return
+	globals.marks[m] = {
+		"file": globals.script_editor.get_current_script().resource_path,
+		"pos": get_caret_pos()
+	}
+	status_bar.call_deferred(&"display_text", 'Mark "%s" set' % m)
+
+func cmd_jump_to_mark(args: Dictionary):
+	if !args.has("selected_char"):
+		push_error("[GodotVIM] Error on cmd_jump_to_mark(): No char selected")
+		return
+	if !globals.has('marks'):
+		globals.marks = {}
+	
+	var m: String = args.selected_char
+	if !globals.marks.has(m):
+		status_bar.display_error('Mark "%s" not set' % m)
+		return
+	var mark: Dictionary = globals.marks[m]
+	globals.vim_plugin.edit_script(mark.file, mark.pos)
 
 #endregion
 

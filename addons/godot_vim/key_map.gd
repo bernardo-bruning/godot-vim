@@ -181,6 +181,8 @@ var key_map: Array[Dictionary] = [
 	{ "keys": ["/"], "type": Action, "action": { "type": "search" } },
 	{ "keys": ["J"], "type": Action, "action": { "type": "join" } },
 	{ "keys": ["z", "z"], "type": Action, "action": { "type": "center_caret" } },
+	{ "keys": ["m", "{char}"], "type": Action, "action": { "type": "mark" } },
+	{ "keys": ["`", "{char}"], "type": Action, "action": { "type": "jump_to_mark" } },
 ]
 
 # Keys we won't handle
@@ -300,9 +302,6 @@ func find_cmd(keys: Array[String], with_context: Mode) -> Dictionary:
 	
 	return { "type": Incomplete if partial else NotFound }
 
-func is_cmd_valid(cmd: Dictionary):
-	return !cmd.is_empty() and cmd.type != Incomplete and cmd.type != NotFound
-
 func execute_operator_motion(cmd: Dictionary):
 	if cmd.has('motion'):
 		if cmd.has('selected_char'):
@@ -379,6 +378,9 @@ func call_cmd(cmd: Dictionary) -> Variant:
 	var func_name: StringName = StringName("cmd_" + cmd.type)
 	return cursor.call(func_name, cmd)
 
+
+static func is_cmd_valid(cmd: Dictionary):
+	return !cmd.is_empty() and cmd.type != Incomplete and cmd.type != NotFound
 
 static func event_to_string(event: InputEventKey) -> String:
 	# Special chars
