@@ -111,7 +111,7 @@ func get_word_edge_pos(from_line: int, from_col: int, forward: bool, word_end: b
 
 
 # Get the 'edge' or a paragraph (like with { or } motions)
-func get_paragraph_edge_pos(from_line: int, forward: bool):
+func get_paragraph_edge_pos(from_line: int, forward: bool) -> Vector2i:
 	var search_dir: int = int(forward) - int(!forward)
 	var line: int = from_line
 	var prev_empty: bool = code_edit.get_line(line) .strip_edges().is_empty()
@@ -123,6 +123,25 @@ func get_paragraph_edge_pos(from_line: int, forward: bool):
 		prev_empty = text.is_empty()
 		line += search_dir
 	return Vector2i(0, line)
+
+
+# Get the 'edge' or a section (like with [[ or ]] motions)
+# See is_line_section()
+func get_section_edge_pos(from_line: int, forward: bool) -> Vector2i:
+	var search_dir: int = int(forward) - int(!forward)
+	var line: int = from_line
+	var is_prev_section: bool = is_line_section( code_edit.get_line(line) )
+	
+	line += search_dir
+	while line >= 0 and line < code_edit.get_line_count():
+		var text: String = code_edit.get_line(line)
+		if is_line_section(text) and !is_prev_section:
+			return Vector2i(text.length(), line)
+		
+		is_prev_section = is_line_section( code_edit.get_line(line) )
+		line += search_dir
+	return Vector2i(0, line)
+
 
 
 func find_char_in_line(line: int, from_col: int, forward: bool, stop_before: bool, char: String) -> int:
@@ -140,9 +159,12 @@ func find_char_in_line(line: int, from_col: int, forward: bool, stop_before: boo
 
 
 func set_line_commented(line: int, is_commented: bool):
-	var ind: int = code_edit.get_first_non_whitespace_column(line)
 	var text: String = get_line_text(line)
+	# Don't comment if empty
+	if text.strip_edges().is_empty():
+		return
 	
+	var ind: int = code_edit.get_first_non_whitespace_column(line)
 	if is_commented:
 		code_edit.set_line(line, text.insert(ind, '# '))
 		return
@@ -172,7 +194,10 @@ func set_mode(m: int):
 			code_edit.deselect()
 			self.grab_focus()
 			status_bar.set_mode_text(Mode.NORMAL)
+			
+			# Insert -> Normal
 			if old_mode == Mode.INSERT:
+				code_edit.end_complex_operation() # See Mode.INSERT match arm below
 				move_column(-1)
 		
 		Mode.VISUAL:
@@ -197,6 +222,11 @@ func set_mode(m: int):
 		Mode.INSERT:
 			code_edit.call_deferred("grab_focus")
 			status_bar.set_mode_text(Mode.INSERT)
+			
+			if old_mode == Mode.NORMAL:
+				# Complex operation so that entire insert mode actions can be undone
+				# with one undo
+				code_edit.begin_complex_operation()
 		
 		_:
 			push_error("[vim::cursor::set_mode()] Unknown mode %s" % mode)
@@ -267,6 +297,12 @@ func is_lowercase(text: String) -> bool:
 
 func is_uppercase(text: String) -> bool:
 	return text == text.to_upper()
+
+func is_line_section(text: String) -> bool:
+	var t: String = text.strip_edges()
+	return text.begins_with("func")\
+		or text.begins_with("class")\
+		or text.begins_with("#region")
 
 func get_stream_char(stream: String, idx: int) -> String:
 	return stream[idx] if stream.length() > idx else ''
@@ -367,6 +403,10 @@ func cmd_move_to_bof(args: Dictionary) -> Vector2i:
 func cmd_move_to_eof(args: Dictionary) -> Vector2i:
 	return Vector2i(0, code_edit.get_line_count())
 
+func cmd_move_to_center_of_line(_args: Dictionary) -> Vector2i:
+	var l: int = get_line()
+	return Vector2i( get_line_length(l) / 2 , l)
+
 ## Repeats the last '/' search
 ## This is the VIM equivalent of "n" and "N"
 ## Args:
@@ -445,7 +485,23 @@ func cmd_find_in_line_again(args_mut: Dictionary) -> Vector2i:
 		return Vector2i(col, line)
 	return Vector2i(get_column(), line)
 
-#endregion
+
+## Moves the cursor by section (VIM equivalent of [[ and ]])
+## Sections are defined by the following keywords:
+## - "func"
+## - "class"
+## - "#region"
+## See also is_line_section()
+##
+## Args:
+## - "forward": bool
+##		Whether to move forward (down) or backward (up)
+func cmd_move_by_section(args: Dictionary) -> Vector2i:
+	var section_edge: Vector2i = get_section_edge_pos(get_line(), args.get('forward', false))
+	return section_edge
+
+
+#endregion MOTIONS
 
 #region ACTIONS
 
@@ -514,12 +570,6 @@ func cmd_command(args: Dictionary):
 		command_line.set_command(args.command)
 	else:
 		command_line.set_command(":")
-
-## Search for a pattern within the current file
-## Short for `cmd_command({ "command" : "/" })`
-func cmd_search(_args: Dictionary):
-	set_mode(Mode.COMMAND)
-	command_line.set_command('/')
 
 func cmd_undo(_args: Dictionary):
 	code_edit.undo()
@@ -593,9 +643,11 @@ func cmd_jump_to_mark(args: Dictionary):
 		status_bar.display_error('Mark "%s" not set' % m)
 		return
 	var mark: Dictionary = globals.marks[m]
-	globals.vim_plugin.edit_script(mark.file, mark.pos)
+	globals.vim_plugin.edit_script(mark.file, mark.pos + Vector2i(0, 1))
+	code_edit.call_deferred(&"center_viewport_to_caret")
 
-#endregion
+
+#endregion ACTIONS
 
 #region OPERATIONS
 
@@ -675,6 +727,34 @@ func cmd_comment(_args: Dictionary):
 	
 	set_mode(Mode.NORMAL)
 
-#endregion
 
-#endregion
+## Sets the selected text to uppercase or lowercase
+## Args:
+## - "uppercase": bool (default: false)
+## 		Whether to toggle uppercase or lowercase
+func cmd_set_uppercase(args: Dictionary):
+	var text: String = code_edit.get_selected_text()
+	if args.get("uppercase", false):
+		code_edit.insert_text_at_caret( text.to_upper() )
+	else:
+		code_edit.insert_text_at_caret( text.to_lower() )
+	
+	set_mode(Mode.NORMAL)
+
+
+## Toggles the case of the selectex text
+func cmd_toggle_uppercase(_args: Dictionary):
+	var text: String = code_edit.get_selected_text()
+	for i in text.length():
+		var char: String = text[i]
+		if is_uppercase(char):
+			text[i] = char.to_lower()
+		else:
+			text[i] = char.to_upper()
+	code_edit.insert_text_at_caret(text)
+	
+	set_mode(Mode.NORMAL)
+
+#endregion OPERATIONS
+
+#endregion COMMANDS

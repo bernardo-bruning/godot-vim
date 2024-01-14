@@ -34,9 +34,27 @@ func _script_changed(script: Script):
 	if !script:
 		return
 	
-	# Add to recent files
-	var marks: Dictionary = globals.get('marks', {})
-	for i in range(9, -1, -1):
+	mark_recent_file(script.resource_path)
+	
+	_load()
+
+
+func mark_recent_file(path: String):
+	if !globals.has("marks"):
+		globals.marks = {}
+	var marks: Dictionary = globals.marks
+	
+	# Check if path is already in the recent files (stored in start_index)
+	# This is to avoid flooding the recent files list with the same files
+	var start_index: int = 0
+	while start_index <= 9:
+		var m: String = str(start_index)
+		if !marks.has(m) or marks[m].file == path: # Found
+			break
+		start_index += 1
+	
+	# Shift all files from start_index down one
+	for i in range(start_index, -1, -1):
 		var m: String = str(i)
 		var prev_m: String = str(i - 1)
 		if !marks.has(prev_m):
@@ -46,10 +64,7 @@ func _script_changed(script: Script):
 	# Mark "-1" won't be accessible to the user
 	# It's just the current file, and will be indexed next time the
 	# loop above ^^^ is called
-	var path: String = script.resource_path
 	marks['-1'] = { 'file' : path, 'pos' : Vector2i(-1, 0) }
-	
-	_load()
 
 
 func edit_script(path: String, pos: Vector2i):

@@ -1,6 +1,7 @@
 class_name KeyRemap extends RefCounted
 
 # TODO Configure via JSON file or Project Settings (if feasible)
+# or create config.gd with user configs inside
 
 
 const Constants = preload("res://addons/godot_vim/constants.gd")
@@ -21,7 +22,7 @@ enum ApplyMode {
 	REMOVE,
 	
 	## Replace a keybind with this one
-	# REPLACE,
+	REPLACE,
 }
 
 # Inner cmd
@@ -29,9 +30,6 @@ var inner: Dictionary = {}
 var options: Dictionary = {
 	"apply_mode": ApplyMode.APPEND
 }
-
-# TODO allow the user to control the position of this remap inside `KeyMap.key_map`
-# TODO allow the user to remove certain keybinds
 
 func _init(keys: Array[String]):
 	assert(!keys.is_empty(), "cmd_keys cannot be empty")
@@ -97,35 +95,21 @@ func apply(key_map: Array[Dictionary]):
 				push_error("[Godot VIM] Failed to insert keybind at index %s: %s" % [ index, error_string(err) ])
 		
 		ApplyMode.REMOVE:
-			var inner_keys: Array[String] = inner.get("keys")
-			if inner_keys == null:
-				push_error("[Godot VIM] Failed to remove keybind: keys not specified")
+			var index: int = _find(key_map, inner)
+			if index == -1:
 				return
-			if inner_keys.is_empty():
-				push_error("[Godot VIM] Failed to remove keybind: keys cannot be empty")
+			key_map.remove_at(index)
+		
+		ApplyMode.REPLACE:
+			var constraints: Dictionary = {
+				"keys": inner.get("keys", [])
+			}
+			var index: int = _find(key_map, constraints)
+			if index == -1:
 				return
 			
-			# Find the specified keybind
-			for i in key_map.size():
-				var cmd: Dictionary = key_map[i]
-				# Check keys
-				var m: KeyMap.KeyMatch = KeyMap.match_keys(cmd.keys, inner_keys)
-				if m != KeyMap.KeyMatch.Full:
-					continue
-				
-				# If types DON'T match (if specified, ofc), skip
-				if inner.has("type") and inner.type != cmd.type:
-					continue
-				
-				# If contexts DON'T match (if specified, ofc), skip
-				if inner.get("context", -1) != cmd.get("context", -1):
-					continue
-				
-				key_map.remove_at(i)
-				return
-		
-		_: # Unreachable
-			pass
+			print('replacing at index ', index)
+			key_map[index] = inner
 
 
 #region Apply options
@@ -162,5 +146,44 @@ func remove() -> KeyRemap:
 	}
 	return self
 
+## Replaces the keybind from the list with this new one
+## Returns self
+func replace():
+	options = {
+		"apply_mode": ApplyMode.REPLACE
+	}
+	return self
+
 
 #endregion
+
+
+
+func _find(key_map: Array[Dictionary], constraints: Dictionary) -> int:
+	var keys: Array[String] = constraints.get("keys")
+	if keys == null:
+		push_error("[Godot VIM::KeyRemap::_find()] Failed to find keybind: keys not specified")
+		return -1
+	if keys.is_empty():
+		push_error("[Godot VIM::KeyRemap::_find()] Failed to find keybind: keys cannot be empty")
+		return -1
+	
+	for i in key_map.size():
+		var cmd: Dictionary = key_map[i]
+		# Check keys
+		var m: KeyMap.KeyMatch = KeyMap.match_keys(cmd.keys, keys)
+		if m != KeyMap.KeyMatch.Full:
+			continue
+		
+		# If types DON'T match (if specified, ofc), skip
+		if constraints.has("type") and constraints.type != cmd.type:
+			continue
+		
+		# If contexts DON'T match (if specified, ofc), skip
+		if constraints.get("context", -1) != cmd.get("context", -1):
+			continue
+		
+		return i
+	return -1
+
+

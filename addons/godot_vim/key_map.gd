@@ -31,11 +31,6 @@ class_name KeyMap extends RefCounted
 ## 		.operator("delete")
 ## 		.motion("move_by_lines", { "move_by": 2, "line_wise": true }),
 ## 	
-## 	# In Insert mode, return to Normal mode with "Ctrl-["
-## 	KeyRemap.new([ "<C-[>" ])
-## 		.action("normal")
-## 		.with_context(Mode.INSERT),
-## 	
 ## 	# In Insert mode, return to Normal mode with "jk"
 ## 	KeyRemap.new([ "j", "k" ])
 ## 		.action("normal", { "backspaces": 1, "offset": 1 })
@@ -49,6 +44,11 @@ static func map() -> Array[KeyRemap]:
 		KeyRemap.new([ "j", "k" ])
 			.action("normal", { "backspaces": 1, "offset": 1 })
 			.with_context(Mode.INSERT),
+		
+		# Make "/" search in case insensitive mode
+		KeyRemap.new([ "/" ])
+			.action("command", { "command": "/(?i)" })
+			.replace(),
 		
 		# In Insert mode, return to Normal mode with "Ctrl-["
 		# KeyRemap.new([ "<C-[>" ])
@@ -117,8 +117,11 @@ var key_map: Array[Dictionary] = [
 	{ "keys": ["^"], "type": Motion, "motion": { "type": "move_to_first_non_whitespace_char" } },
 	{ "keys": ["{"], "type": Motion, "motion": { "type": "move_by_paragraph", "forward": false, "line_wise": true } },
 	{ "keys": ["}"], "type": Motion, "motion": { "type": "move_by_paragraph", "forward": true, "line_wise": true } },
-	{ "keys": ["g", "g"], "type": Motion, "motion": { "type": "move_to_bof" } },
-	{ "keys": ["G"], "type": Motion, "motion": { "type": "move_to_eof" } },
+	{ "keys": ["[", "["], "type": Motion, "motion": { "type": "move_by_section", "forward": false, "line_wise": true } },
+	{ "keys": ["]", "]"], "type": Motion, "motion": { "type": "move_by_section", "forward": true, "line_wise": true } },
+	{ "keys": ["g", "g"], "type": Motion, "motion": { "type": "move_to_bof", "line_wise": true } },
+	{ "keys": ["G"], "type": Motion, "motion": { "type": "move_to_eof", "line_wise": true } },
+	{ "keys": ["g", "m"], "type": Motion, "motion": { "type": "move_to_center_of_line" } },
 	{ "keys": ["n"], "type": Motion, "motion": { "type": "find_again", "forward": true } },
 	{ "keys": ["N"], "type": Motion, "motion": { "type": "find_again", "forward": false } },
 	
@@ -164,6 +167,13 @@ var key_map: Array[Dictionary] = [
 		"motion": { "type": "move_by_chars", "move_by": 1 }
 	},
 	{ "keys": ["g", "c"], "type": Operator, "operator": { "type": "comment" } },
+	{ "keys": ["~"], "type": OperatorMotion,
+		"operator": { "type": "toggle_uppercase" },
+		"motion": { "type": "move_by_chars", "move_by": 1 }
+	},
+	{ "keys": ["~"], "type": Operator, "context": Mode.VISUAL, "operator": { "type": "toggle_uppercase" } },
+	{ "keys": ["u"], "type": Operator, "context": Mode.VISUAL, "operator": { "type": "set_uppercase", "uppercase": false } },
+	{ "keys": ["U"], "type": Operator, "context": Mode.VISUAL, "operator": { "type": "set_uppercase", "uppercase": true } },
 	
 	# ACTIONS
 	{ "keys": ["i"], "type": Action, "action": { "type": "insert" } },
@@ -178,7 +188,7 @@ var key_map: Array[Dictionary] = [
 	{ "keys": ["<C-r>"], "type": Action, "action": { "type": "redo" } },
 	{ "keys": ["r", "{char}"], "type": Action, "action": { "type": "replace" } },
 	{ "keys": [":"], "type": Action, "action": { "type": "command" } },
-	{ "keys": ["/"], "type": Action, "action": { "type": "search" } },
+	{ "keys": ["/"], "type": Action, "action": { "type": "command", "command": "/" } },
 	{ "keys": ["J"], "type": Action, "action": { "type": "join" } },
 	{ "keys": ["z", "z"], "type": Action, "action": { "type": "center_caret" } },
 	{ "keys": ["m", "{char}"], "type": Action, "action": { "type": "mark" } },
