@@ -17,26 +17,37 @@ var globals: Dictionary = {}
 var dispatcher: Dispatcher
 
 func _enter_tree():
-	EditorInterface.get_script_editor().connect("editor_script_changed", _script_changed)
+	EditorInterface.get_script_editor().connect("editor_script_changed", _on_script_changed)
+	
+	var shader_tabcontainer = get_shader_tabcontainer() as TabContainer
+	# TODO handle shader_tabcontainer == null
+	shader_tabcontainer.tab_changed.connect(_on_shader_tab_changed)
+	shader_tabcontainer.visibility_changed.connect(_on_shader_tab_visibility_changed)
+	
 	globals = {}
 	initialize(true)
 
 
 func initialize(forced: bool = false):
-	if get_code_edit() != null:
-		_load(forced)
+	_load(forced)
 	
 	print("[Godot VIM] Initialized.")
 	print("    If you wish to set keybindings, please run :remap in the command line")
 
 
-func _script_changed(script: Script):
+func _on_script_changed(script: Script):
 	if !script:
 		return
 	
 	mark_recent_file(script.resource_path)
 	
 	_load()
+
+func _on_shader_tab_changed(_tab: int):
+	call_deferred(&"_load")
+
+func _on_shader_tab_visibility_changed():
+	call_deferred(&"_load")
 
 
 func mark_recent_file(path: String):
@@ -74,19 +85,50 @@ func edit_script(path: String, pos: Vector2i):
 		return ''
 	EditorInterface.edit_script(script, pos.y, pos.x)
 
+#region LOAD
+
+# TODO better dependency management
+
+func _init_cursor(code_edit: CodeEdit, is_editing_shader: bool):
+	if cursor != null:
+		cursor.queue_free()
+	
+	cursor = Cursor.new()
+	code_edit.select(code_edit.get_caret_line(), code_edit.get_caret_column(), code_edit.get_caret_line(), code_edit.get_caret_column()+1)
+	cursor.code_edit = code_edit
+	cursor.globals = globals
+
+func _init_command_line(code_edit: CodeEdit):
+	if command_line != null:
+		command_line.queue_free()
+	command_line = CommandLine.new()
+	
+	command_line.code_edit = code_edit
+	cursor.command_line = command_line
+	command_line.cursor = cursor
+	command_line.globals = globals
+	command_line.hide()
+
+func _init_status_bar():
+	if status_bar != null:
+		status_bar.queue_free()
+	status_bar = StatusBar.new()
+	cursor.status_bar = status_bar
+	command_line.status_bar = status_bar
+
 
 func _load(forced: bool = false):
 	if globals == null:
 		globals = {}
 	
-	# Cursor
-	if cursor != null:
-		cursor.queue_free()
-	cursor = Cursor.new()
-	var code_edit = get_code_edit()
-	code_edit.select(code_edit.get_caret_line(), code_edit.get_caret_column(), code_edit.get_caret_line(), code_edit.get_caret_column()+1)
-	cursor.code_edit = code_edit
-	cursor.globals = globals
+	var result: Dictionary = find_code_edit()
+	# TODO handle result.is_empty()
+	var code_edit: CodeEdit = result.code_edit
+	var is_editing_shader: bool = result.is_shader
+	
+	_init_cursor(code_edit, is_editing_shader)
+	_init_command_line(code_edit)
+	_init_status_bar()
 	
 	# KeyMap
 	if key_map == null or forced:
@@ -94,23 +136,6 @@ func _load(forced: bool = false):
 	else:
 		key_map.cursor = cursor
 	cursor.key_map = key_map
-	
-	# Command line
-	if command_line != null:
-		command_line.queue_free()
-	command_line = CommandLine.new()
-	command_line.code_edit = code_edit
-	cursor.command_line = command_line
-	command_line.cursor = cursor
-	command_line.globals = globals
-	command_line.hide()
-	
-	# Status bar
-	if status_bar != null:
-		status_bar.queue_free()
-	status_bar = StatusBar.new()
-	cursor.status_bar = status_bar
-	command_line.status_bar = status_bar
 	
 	var script_editor = EditorInterface.get_script_editor()
 	if script_editor == null:	return
@@ -125,21 +150,96 @@ func _load(forced: bool = false):
 	globals.vim_plugin = self
 	globals.key_map = key_map
 	
-	script_editor_base.add_child(cursor)
-	script_editor_base.add_child(status_bar)
-	script_editor_base.add_child(command_line)
-	
 	dispatcher = Dispatcher.new()
 	dispatcher.globals = globals
+	
+	# Add nodes
+	if !is_editing_shader:
+		code_edit.add_child(cursor)
+		script_editor_base.add_child(status_bar)
+		script_editor_base.add_child(command_line)
+		return
+	
+	var shaders_container = code_edit
+	for i in 3:
+		shaders_container = shaders_container.get_parent()
+	# TODO handle shaders_container == null
+	
+	code_edit.add_child(cursor)
+	shaders_container.add_child(status_bar)
+	shaders_container.add_child(command_line)
+
+#endregion LOAD
 
 func dispatch(command: String):
 	return dispatcher.dispatch(command)
 
-func get_code_edit():
+
+# TODO documentation
+func find_code_edit() -> Dictionary:
+	var code_edit: CodeEdit = get_shader_code_edit()
+	var is_shader: bool = true
+	# Shader panel not open; normal gdscript code edit
+	if code_edit == null:
+		code_edit = get_regular_code_edit()
+		is_shader = false
+	if code_edit == null:
+		return {}
+	
+	return {
+		"code_edit": code_edit,
+		"is_shader": is_shader,
+	}
+
+func get_regular_code_edit():
 	var editor = EditorInterface.get_script_editor().get_current_editor()
 	return _select(editor, ['VSplitContainer', 'CodeTextEditor', 'CodeEdit'])
 
-func _select(obj: Node, types: Array[String]): # ???
+func get_shader_code_edit():
+	var container = get_shader_tabcontainer()
+	# TODO handle container == null
+	
+	# Panel not open
+	if !container.is_visible_in_tree():
+		return
+	
+	var editors = container.get_children(false)
+	for tse in editors:
+		if !tse.visible: # Not open
+			continue
+		
+		var code_edit = _select(tse, [
+			"VBoxContainer",
+			"VSplitContainer",
+			"ShaderTextEditor",
+			"CodeEdit"
+		])
+		# TODO handle code_edit == null
+		
+		# if !code_edit.has_focus():
+			# return
+		return code_edit
+
+## Returns Option<TabContainer> (aka either TabContainer or null if it fails)
+func get_shader_tabcontainer():
+	# Get the VSplitContainer containing the script editor and bottom panels
+	var container = EditorInterface.get_script_editor()
+	for i in 6:
+		container = container.get_parent()
+	# TODO handle container == null
+	
+	# Get code edit
+	container = _select(container, [
+		"PanelContainer",
+		"VBoxContainer",
+		"WindowWrapper",
+		"HSplitContainer",
+		"TabContainer"
+	])
+	return container
+
+
+func _select(obj: Node, types: Array[String]):
 	for type in types:
 		for child in obj.get_children():
 			if child.is_class(type):
