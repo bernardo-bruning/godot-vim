@@ -7,37 +7,27 @@ TO understand what each of the commands do, simply fire up a real instance of vi
 ## motion
 
 ```
-  h
-  j
-  k
-  l
-  w
-  e
-  b
-  f
-  t
+  h, j, k, l
+  w, e, ge, b
+  f, t, F, T
   ;
   ,
   $
   ^
   0
   gg
+  G
   }
   {
-  m
-  `
+  (Marks not yet implemented, please use Godot bookmarks)
 ```
 
 ## insert
 
 ```
-  i
-  I
-  a
-  A
-  G
-  o
-  O
+  i I
+  a A
+  o O
 ```
 
 ## visual
@@ -80,24 +70,13 @@ TO understand what each of the commands do, simply fire up a real instance of vi
 
 ```
   J
-  d
-  dd
-  D
+  d dd D
   p
-  P
   x
   s
   r
-  y
-  yy
-  n
-  N
-  c
-  c
-  C
-  z
-  >
-  >>
-  <
-  <<
+  y yy
+  c cc C
+  > >>
+  < <<
 ```

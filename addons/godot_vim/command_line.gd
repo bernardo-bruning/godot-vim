@@ -5,7 +5,6 @@ const StatusBar = preload("res://addons/godot_vim/status_bar.gd")
 const Constants = preload("res://addons/godot_vim/constants.gd")
 const Mode = Constants.Mode
 
-const Marks = preload("res://addons/godot_vim/commands/marks.gd")
 const Goto = preload("res://addons/godot_vim/commands/goto.gd")
 const Find = preload("res://addons/godot_vim/commands/find.gd")
 

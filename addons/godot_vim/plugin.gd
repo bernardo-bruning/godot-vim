@@ -10,44 +10,72 @@ const Cursor = preload("res://addons/godot_vim/cursor.gd")
 const Dispatcher = preload("res://addons/godot_vim/dispatcher.gd")
 
 var cursor: Cursor
+var key_map: KeyMap
 var command_line: CommandLine
 var status_bar: StatusBar
 var globals: Dictionary = {}
 var dispatcher: Dispatcher
 
 func _enter_tree():
+	EditorInterface.get_script_editor().connect("editor_script_changed", _script_changed)
 	globals = {}
-	
+	initialize(true)
+
+
+func initialize(forced: bool = false):
 	if get_code_edit() != null:
-		_load()
-	get_editor_interface().get_script_editor().connect("editor_script_changed", _script_changed)
+		_load(forced)
+	
+	print("[Godot VIM] Initialized.")
+	print("    If you wish to set keybindings, please run :remap in the command line")
+
 
 func _script_changed(script: Script):
-	# Add to recent files
-	var path: String = script.resource_path
-	var marks: Dictionary = globals.get('marks', {})
-	for i in range(9, -1, -1):
-		var m: String = str(i)
-		var pm: String = str(i - 1)
-		if !marks.has(pm):
-			continue
-		marks[m] = marks[pm]
-	marks['-1'] = { 'file' : path, 'pos' : Vector2i(-1, 0) }
+	if !script:
+		return
+	
+	mark_recent_file(script.resource_path)
 	
 	_load()
 
 
+func mark_recent_file(path: String):
+	if !globals.has("marks"):
+		globals.marks = {}
+	var marks: Dictionary = globals.marks
+	
+	# Check if path is already in the recent files (stored in start_index)
+	# This is to avoid flooding the recent files list with the same files
+	var start_index: int = 0
+	while start_index <= 9:
+		var m: String = str(start_index)
+		if !marks.has(m) or marks[m].file == path: # Found
+			break
+		start_index += 1
+	
+	# Shift all files from start_index down one
+	for i in range(start_index, -1, -1):
+		var m: String = str(i)
+		var prev_m: String = str(i - 1)
+		if !marks.has(prev_m):
+			continue
+		marks[m] = marks[prev_m]
+	
+	# Mark "-1" won't be accessible to the user
+	# It's just the current file, and will be indexed next time the
+	# loop above ^^^ is called
+	marks['-1'] = { 'file' : path, 'pos' : Vector2i(-1, 0) }
+
+
 func edit_script(path: String, pos: Vector2i):
 	var script = load(path)
-	var editor_interface: EditorInterface = globals.editor_interface
 	if script == null:
 		status_bar.display_error('Could not open file "%s"' % path)
 		return ''
-	editor_interface.edit_script(script)
-	cursor.call_deferred('set_caret_pos', pos.y, pos.x)
+	EditorInterface.edit_script(script, pos.y, pos.x)
 
 
-func _load():
+func _load(forced: bool = false):
 	if globals == null:
 		globals = {}
 	
@@ -59,6 +87,13 @@ func _load():
 	code_edit.select(code_edit.get_caret_line(), code_edit.get_caret_column(), code_edit.get_caret_line(), code_edit.get_caret_column()+1)
 	cursor.code_edit = code_edit
 	cursor.globals = globals
+	
+	# KeyMap
+	if key_map == null or forced:
+		key_map = KeyMap.new(cursor)
+	else:
+		key_map.cursor = cursor
+	cursor.key_map = key_map
 	
 	# Command line
 	if command_line != null:
@@ -77,20 +112,19 @@ func _load():
 	cursor.status_bar = status_bar
 	command_line.status_bar = status_bar
 	
-	var editor_interface = get_editor_interface()
-	if editor_interface == null:	return
-	var script_editor = editor_interface.get_script_editor()
+	var script_editor = EditorInterface.get_script_editor()
 	if script_editor == null:	return
 	var script_editor_base = script_editor.get_current_editor()
 	if script_editor_base == null:	return
 	
-	globals.editor_interface = editor_interface
 	globals.command_line = command_line
 	globals.status_bar = status_bar
 	globals.code_edit = code_edit
 	globals.cursor = cursor
 	globals.script_editor = script_editor
 	globals.vim_plugin = self
+	globals.key_map = key_map
+	
 	script_editor_base.add_child(cursor)
 	script_editor_base.add_child(status_bar)
 	script_editor_base.add_child(command_line)
@@ -102,7 +136,7 @@ func dispatch(command: String):
 	return dispatcher.dispatch(command)
 
 func get_code_edit():
-	var editor = get_editor_interface().get_script_editor().get_current_editor()
+	var editor = EditorInterface.get_script_editor().get_current_editor()
 	return _select(editor, ['VSplitContainer', 'CodeTextEditor', 'CodeEdit'])
 
 func _select(obj: Node, types: Array[String]): # ???

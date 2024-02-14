@@ -1,8 +1,66 @@
 class_name KeyMap extends RefCounted
 ## Hanldes input stream and key mapping
+##
+## You may also set your keybindings in the [method map] function
+
+## * SET YOUR KEYBINDINGS HERE *
+## Also see the "COMMANDS" section at the bottom of cursor.gd
+##  E.g. the command for
+##    KeyRemap.new(...) .motion("foo", { "bar": 1 })
+##  is handled in Cursor::cmd_foo(args: Dictionary)
+##  where `args` is  `{ "type": "foo", "bar": 1 }`
+## Example:
+## [codeblock]
+## return [
+## 	# Move 5 characters to the right with "L"
+## 	KeyRemap.new([ "L" ])
+## 		.motion("move_by_chars", { "move_by": 5 }),
+## 	
+## 	# Let's remove "d" (the delete operator) and replace it with "q"
+## 	# You may additionally specify the type and context of the cmd to remove
+##  # using .operator() (or .motion() or .action() etc...) and .with_context()
+## 	KeyRemap.new([ "d" ])
+##      .remove(),
+##  # "q" is now the new delete operator
+## 	KeyRemap.new([ "q" ])
+## 		.operator("delete"),
+## 	
+## 	# Delete this line along with the next two with "Z"
+## 	# .operator() and .motion() automatically merge together
+## 	KeyRemap.new([ "Z" ])
+## 		.operator("delete")
+## 		.motion("move_by_lines", { "move_by": 2, "line_wise": true }),
+## 	
+## 	# In Insert mode, return to Normal mode with "jk"
+## 	KeyRemap.new([ "j", "k" ])
+## 		.action("normal", { "backspaces": 1, "offset": 1 })
+## 		.with_context(Mode.INSERT),
+## ]
+## [/codeblock]
+static func map() -> Array[KeyRemap]:
+	# Example:
+	return [
+		# In Insert mode, return to Normal mode with "jk"
+		KeyRemap.new([ "j", "k" ])
+			.action("normal", { "backspaces": 1, "offset": 1 })
+			.with_context(Mode.INSERT),
+		
+		# Make "/" search in case insensitive mode
+		KeyRemap.new([ "/" ])
+			.action("command", { "command": "/(?i)" })
+			.replace(),
+		
+		# In Insert mode, return to Normal mode with "Ctrl-["
+		# KeyRemap.new([ "<C-[>" ])
+			# .action("normal")
+			# .with_context(Mode.INSERT),
+	]
+
 
 const Constants = preload("res://addons/godot_vim/constants.gd")
 const Mode = Constants.Mode
+
+const INSERT_MODE_TIMEOUT_MS: int = 700
 
 
 enum {
@@ -27,19 +85,19 @@ enum {
 
 
 
-# `static var` doesn't work
 # Also see the "COMMANDS" section at the bottom of cursor.gd
 #  Command for     { "type": "foo", ... }   is handled in Cursor::cmd_foo(args: Dictionary)
 #  where `args` is ^^^^^ this Dict ^^^^^^
-const key_map: Array[Dictionary] = [
+var key_map: Array[Dictionary] = [
 	# MOTIONS
 	{ "keys": ["h"], "type": Motion, "motion": { "type": "move_by_chars", "move_by": -1 } },
 	{ "keys": ["l"], "type": Motion, "motion": { "type": "move_by_chars", "move_by": 1 } },
 	{ "keys": ["j"], "type": Motion, "motion": { "type": "move_by_lines", "move_by": 1, "line_wise": true } },
 	{ "keys": ["k"], "type": Motion, "motion": { "type": "move_by_lines", "move_by": -1, "line_wise": true } },
 	
+	# About motions: the argument `inclusive` is used with Operators (see execute_operator_motion())
 	{ "keys": ["w"], "type": Motion, "motion": { "type": "move_by_word", "forward": true, "word_end": false } },
-	{ "keys": ["e"], "type": Motion, "motion": { "type": "move_by_word", "forward": true, "word_end": true, "inclusive": true } }, # `inclusive` is used with Operators (see execute_operator_motion())
+	{ "keys": ["e"], "type": Motion, "motion": { "type": "move_by_word", "forward": true, "word_end": true, "inclusive": true } },
 	{ "keys": ["b"], "type": Motion, "motion": { "type": "move_by_word", "forward": false, "word_end": false } },
 	{ "keys": ["g", "e"], "type": Motion, "motion": { "type": "move_by_word", "forward": false, "word_end": true } },
 	{ "keys": ["W"], "type": Motion, "motion": { "type": "move_by_word", "forward": true, "word_end": false, "big_word": true } },
@@ -59,8 +117,11 @@ const key_map: Array[Dictionary] = [
 	{ "keys": ["^"], "type": Motion, "motion": { "type": "move_to_first_non_whitespace_char" } },
 	{ "keys": ["{"], "type": Motion, "motion": { "type": "move_by_paragraph", "forward": false, "line_wise": true } },
 	{ "keys": ["}"], "type": Motion, "motion": { "type": "move_by_paragraph", "forward": true, "line_wise": true } },
-	{ "keys": ["g", "g"], "type": Motion, "motion": { "type": "move_to_bof" } },
-	{ "keys": ["G"], "type": Motion, "motion": { "type": "move_to_eof" } },
+	{ "keys": ["[", "["], "type": Motion, "motion": { "type": "move_by_section", "forward": false, "line_wise": true } },
+	{ "keys": ["]", "]"], "type": Motion, "motion": { "type": "move_by_section", "forward": true, "line_wise": true } },
+	{ "keys": ["g", "g"], "type": Motion, "motion": { "type": "move_to_bof", "line_wise": true } },
+	{ "keys": ["G"], "type": Motion, "motion": { "type": "move_to_eof", "line_wise": true } },
+	{ "keys": ["g", "m"], "type": Motion, "motion": { "type": "move_to_center_of_line" } },
 	{ "keys": ["n"], "type": Motion, "motion": { "type": "find_again", "forward": true } },
 	{ "keys": ["N"], "type": Motion, "motion": { "type": "find_again", "forward": false } },
 	
@@ -100,7 +161,19 @@ const key_map: Array[Dictionary] = [
 	
 	{ "keys": [">"], "type": Operator, "operator": { "type": "indent", "forward": true } },
 	{ "keys": ["<"], "type": Operator, "operator": { "type": "indent", "forward": false } },
+	
+	{ "keys": ["g", "c", "c"], "type": OperatorMotion,
+		"operator": { "type": "comment" },
+		"motion": { "type": "move_by_chars", "move_by": 1 }
+	},
 	{ "keys": ["g", "c"], "type": Operator, "operator": { "type": "comment" } },
+	{ "keys": ["~"], "type": OperatorMotion,
+		"operator": { "type": "toggle_uppercase" },
+		"motion": { "type": "move_by_chars", "move_by": 1 }
+	},
+	{ "keys": ["~"], "type": Operator, "context": Mode.VISUAL, "operator": { "type": "toggle_uppercase" } },
+	{ "keys": ["u"], "type": Operator, "context": Mode.VISUAL, "operator": { "type": "set_uppercase", "uppercase": false } },
+	{ "keys": ["U"], "type": Operator, "context": Mode.VISUAL, "operator": { "type": "set_uppercase", "uppercase": true } },
 	
 	# ACTIONS
 	{ "keys": ["i"], "type": Action, "action": { "type": "insert" } },
@@ -115,15 +188,17 @@ const key_map: Array[Dictionary] = [
 	{ "keys": ["<C-r>"], "type": Action, "action": { "type": "redo" } },
 	{ "keys": ["r", "{char}"], "type": Action, "action": { "type": "replace" } },
 	{ "keys": [":"], "type": Action, "action": { "type": "command" } },
-	{ "keys": ["/"], "type": Action, "action": { "type": "search" } },
+	{ "keys": ["/"], "type": Action, "action": { "type": "command", "command": "/" } },
 	{ "keys": ["J"], "type": Action, "action": { "type": "join" } },
 	{ "keys": ["z", "z"], "type": Action, "action": { "type": "center_caret" } },
+	{ "keys": ["m", "{char}"], "type": Action, "action": { "type": "mark" } },
+	{ "keys": ["`", "{char}"], "type": Action, "action": { "type": "jump_to_mark" } },
 ]
 
 # Keys we won't handle
 const BLACKLIST: Array[String] = [
 	"<C-s>", # Save
-	"<C-b>", # Bookmark
+	"<C-b>", # Bookmark (marks arent' implemented yet)
 ]
 
 enum KeyMatch {
@@ -135,24 +210,33 @@ enum KeyMatch {
 
 var input_stream: Array[String] = []
 var cursor: Control
+var last_insert_mode_input_ms: int = 0
 
 
 func _init(cursor_: Control):
 	cursor = cursor_
-	# key_map.make_read_only()
+	apply_remaps( KeyMap.map() )
 
 
 ## Returns: Dictionary with the found command: { "type": Motion or Operator or OperatorMotion or Action or Incomplete or NotFound, ... }
 ## Warning: the returned Dict can be empty in if the event wasn't processed
 func register_event(event: InputEventKey, with_context: Mode) -> Dictionary:
-	var ch: String = event_to_char(event)
+	# Stringify event
+	var ch: String = event_to_string(event)
 	if ch.is_empty():	return {} # Invalid
 	if BLACKLIST.has(ch):	return {}
 	
+	# Handle Insert mode timeout
+	if with_context == Mode.INSERT:
+		if handle_insert_mode_timeout():
+			clear()
+			return {}
+	
+	# Process input stream
 	# print("[KeyMap::register_event()] ch = ", ch) # DEBUG
 	input_stream.append(ch)
 	var cmd: Dictionary = parse_keys(input_stream, with_context)
-	if cmd.is_empty() or cmd.type in [Incomplete, NotFound]:
+	if !is_cmd_valid(cmd):
 		return { 'type': NotFound }
 	
 	execute(cmd)
@@ -193,6 +277,11 @@ func find_cmd(keys: Array[String], with_context: Mode) -> Dictionary:
 	var is_visual: bool = with_context == Mode.VISUAL or with_context == Mode.VISUAL_LINE
 	
 	for cmd in key_map:
+		# FILTERS
+		# Don't allow anything in Insert mode unless specified
+		if with_context == Mode.INSERT and cmd.get("context", -1) != Mode.INSERT:
+			continue
+		
 		# OperatorMotions in visual mode aren't allowed
 		if cmd.type == OperatorMotion and is_visual:
 			continue
@@ -202,13 +291,13 @@ func find_cmd(keys: Array[String], with_context: Mode) -> Dictionary:
 			and !(cmd.has("context") and cursor.is_mode_visual(cmd.context)):
 			continue
 		
-		# Allow Operators to be executed as-is in visual mode
+		# Allow Operators to be executed as-is (without additional motion) in visual mode
 		if !(cmd.type == Operator and is_visual):
 			# Check context for other commands
 			if cmd.has("context") and with_context != cmd.context:
 				continue
 		
-		# Check keys
+		# CHECK KEYS
 		var m: KeyMatch = match_keys(cmd.keys, keys)
 		partial = partial or m == KeyMatch.Partial # Set/keep partial = true if it was a partial match
 		if m != KeyMatch.Full:
@@ -220,11 +309,8 @@ func find_cmd(keys: Array[String], with_context: Mode) -> Dictionary:
 		if cmd.keys[-1] == '{char}':
 			cmd_mut.selected_char = keys.back()
 		return cmd_mut
-	# return { "type": Incomplete if partial else NotFound }
-	return { "type": Incomplete*int(partial) + NotFound*int(!partial) }
-
-func check(cmd: Dictionary):
-	return cmd.type == Incomplete or cmd.type == NotFound
+	
+	return { "type": Incomplete if partial else NotFound }
 
 func execute_operator_motion(cmd: Dictionary):
 	if cmd.has('motion'):
@@ -265,7 +351,7 @@ func execute_motion(cmd: Dictionary):
 	cursor.set_caret_pos(pos.y, pos.x)
 
 func execute(cmd: Dictionary):
-	if check(cmd):
+	if !is_cmd_valid(cmd):
 		return
 	
 	match cmd.type:
@@ -303,12 +389,17 @@ func call_cmd(cmd: Dictionary) -> Variant:
 	return cursor.call(func_name, cmd)
 
 
-static func event_to_char(event: InputEventKey) -> String:
+static func is_cmd_valid(cmd: Dictionary):
+	return !cmd.is_empty() and cmd.type != Incomplete and cmd.type != NotFound
+
+static func event_to_string(event: InputEventKey) -> String:
 	# Special chars
 	if event.keycode == KEY_ENTER:
 		return "<CR>"
 	if event.keycode == KEY_TAB:
 		return "<TAB>"
+	if event.keycode == KEY_ESCAPE:
+		return "<ESC>"
 	
 	# Ctrl + key
 	if event.is_command_or_control_pressed():
@@ -329,7 +420,7 @@ static func match_keys(expected_keys: Array, input_keys: Array) -> KeyMatch:
 			return KeyMatch.Full
 		
 		# If everything up until {char} matches
-		elif expected_keys.slice(0, input_keys.size()-1) == input_keys.slice(0, -1):
+		elif expected_keys.slice(0, input_keys.size()) == input_keys:
 			return KeyMatch.Partial
 	
 	else:
@@ -342,14 +433,37 @@ static func match_keys(expected_keys: Array, input_keys: Array) -> KeyMatch:
 		# Cases with operators like "dj", "ce"
 		elif input_keys.slice(0, expected_keys.size()) == expected_keys and input_keys.size() > expected_keys.size():
 			return KeyMatch.Full
-		
+	
 	return KeyMatch.None
 
+## Clears the input stream
 func clear():
 	input_stream = []
 
-
 func get_input_stream_as_string() -> String:
 	return ''.join(PackedStringArray(input_stream))
+
+## Returns whether the Insert mode input has timed out, in which case we
+## don't want to process it
+func handle_insert_mode_timeout() -> bool:
+	var current_tick_ms: int = Time.get_ticks_msec()
+	
+	if input_stream.is_empty():
+		last_insert_mode_input_ms = current_tick_ms
+		return false
+	
+	if current_tick_ms - last_insert_mode_input_ms > INSERT_MODE_TIMEOUT_MS:
+		last_insert_mode_input_ms = current_tick_ms
+		return true
+	last_insert_mode_input_ms = current_tick_ms
+	return false
+
+
+func apply_remaps(map: Array[KeyRemap]):
+	if map.is_empty():
+		return
+	print('[Godot VIM] Applying keybind remaps...')
+	for remap in map:
+		remap.apply(key_map)
 
 
