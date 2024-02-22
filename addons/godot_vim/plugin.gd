@@ -1,13 +1,14 @@
 @tool
 extends EditorPlugin
 
-const SPACES: String = " \t"
-const KEYWORDS: String = ".,\"'-=+!@#$%^&*()[]{}?~/\\<>:;"
-const DIGITS: String = "0123456789"
 const StatusBar = preload("res://addons/godot_vim/status_bar.gd")
 const CommandLine = preload("res://addons/godot_vim/command_line.gd")
 const Cursor = preload("res://addons/godot_vim/cursor.gd")
 const Dispatcher = preload("res://addons/godot_vim/dispatcher.gd")
+
+const Constants = preload("res://addons/godot_vim/constants.gd")
+const DIGITS = Constants.DIGITS
+const LANGUAGE = Constants.Language
 
 var cursor: Cursor
 var key_map: KeyMap
@@ -20,9 +21,11 @@ func _enter_tree():
 	EditorInterface.get_script_editor().connect("editor_script_changed", _on_script_changed)
 	
 	var shader_tabcontainer = get_shader_tabcontainer() as TabContainer
-	# TODO handle shader_tabcontainer == null
-	shader_tabcontainer.tab_changed.connect(_on_shader_tab_changed)
-	shader_tabcontainer.visibility_changed.connect(_on_shader_tab_visibility_changed)
+	if shader_tabcontainer != null:
+		shader_tabcontainer.tab_changed.connect(_on_shader_tab_changed)
+		shader_tabcontainer.visibility_changed.connect(_on_shader_tab_visibility_changed)
+	else:
+		push_error("[Godot VIM] Failed to get shader editor's TabContainer. Vim will be disabled in the shader editor")
 	
 	globals = {}
 	initialize(true)
@@ -87,15 +90,14 @@ func edit_script(path: String, pos: Vector2i):
 
 #region LOAD
 
-# TODO better dependency management
-
-func _init_cursor(code_edit: CodeEdit, is_editing_shader: bool):
+func _init_cursor(code_edit: CodeEdit, language: LANGUAGE):
 	if cursor != null:
 		cursor.queue_free()
 	
 	cursor = Cursor.new()
 	code_edit.select(code_edit.get_caret_line(), code_edit.get_caret_column(), code_edit.get_caret_line(), code_edit.get_caret_column()+1)
 	cursor.code_edit = code_edit
+	cursor.language = language
 	cursor.globals = globals
 
 func _init_command_line(code_edit: CodeEdit):
@@ -122,11 +124,12 @@ func _load(forced: bool = false):
 		globals = {}
 	
 	var result: Dictionary = find_code_edit()
-	# TODO handle result.is_empty()
+	if result.is_empty():
+		return
 	var code_edit: CodeEdit = result.code_edit
-	var is_editing_shader: bool = result.is_shader
+	var language: LANGUAGE = result.language
 	
-	_init_cursor(code_edit, is_editing_shader)
+	_init_cursor(code_edit, language)
 	_init_command_line(code_edit)
 	_init_status_bar()
 	
@@ -154,18 +157,23 @@ func _load(forced: bool = false):
 	dispatcher.globals = globals
 	
 	# Add nodes
-	if !is_editing_shader:
-		code_edit.add_child(cursor)
+	if language != LANGUAGE.SHADER:
+		script_editor_base.add_child(cursor)
 		script_editor_base.add_child(status_bar)
 		script_editor_base.add_child(command_line)
 		return
 	
+	# Get shader editor VBoxContainer
 	var shaders_container = code_edit
 	for i in 3:
 		shaders_container = shaders_container.get_parent()
-	# TODO handle shaders_container == null
+	if shaders_container == null:
+		# We do not print an error here because for this to fail,
+		#  get_shader_code_edit() (through find_code_edit()) must have
+		#  already failed
+		return
 	
-	code_edit.add_child(cursor)
+	shaders_container.add_child(cursor)
 	shaders_container.add_child(status_bar)
 	shaders_container.add_child(command_line)
 
@@ -175,33 +183,39 @@ func dispatch(command: String):
 	return dispatcher.dispatch(command)
 
 
-# TODO documentation
+## Finds whatever CodeEdit is open
 func find_code_edit() -> Dictionary:
 	var code_edit: CodeEdit = get_shader_code_edit()
-	var is_shader: bool = true
+	var language: LANGUAGE = LANGUAGE.SHADER
 	# Shader panel not open; normal gdscript code edit
 	if code_edit == null:
 		code_edit = get_regular_code_edit()
-		is_shader = false
+		language = LANGUAGE.GDSCRIPT
 	if code_edit == null:
 		return {}
 	
 	return {
 		"code_edit": code_edit,
-		"is_shader": is_shader,
+		"language": language,
 	}
 
+## Gets the regular GDScript CodeEdit
 func get_regular_code_edit():
 	var editor = EditorInterface.get_script_editor().get_current_editor()
 	return _select(editor, ['VSplitContainer', 'CodeTextEditor', 'CodeEdit'])
 
+# FIXME Handle cases where the shader editor is its own floating window
+## Gets the shader editor's CodeEdit
+## Returns Option<CodeEdit> (aka CodeEdit or null)
 func get_shader_code_edit():
 	var container = get_shader_tabcontainer()
-	# TODO handle container == null
+	if container == null:
+		push_error("[Godot VIM] Failed to get shader editor's TabContainer. Vim will be disabled in the shader editor")
+		return null
 	
 	# Panel not open
 	if !container.is_visible_in_tree():
-		return
+		return null
 	
 	var editors = container.get_children(false)
 	for tse in editors:
@@ -214,10 +228,11 @@ func get_shader_code_edit():
 			"ShaderTextEditor",
 			"CodeEdit"
 		])
-		# TODO handle code_edit == null
 		
-		# if !code_edit.has_focus():
-			# return
+		if code_edit == null:
+			push_error("[Godot Vim] Failed to get shader editor's CodeEdit. Vim will be disabled in the shader editor")
+			return null
+		
 		return code_edit
 
 ## Returns Option<TabContainer> (aka either TabContainer or null if it fails)
@@ -226,7 +241,9 @@ func get_shader_tabcontainer():
 	var container = EditorInterface.get_script_editor()
 	for i in 6:
 		container = container.get_parent()
-	# TODO handle container == null
+	if container == null:
+		# We don't print an error here, let us handle this exception elsewhere
+		return null
 	
 	# Get code edit
 	container = _select(container, [

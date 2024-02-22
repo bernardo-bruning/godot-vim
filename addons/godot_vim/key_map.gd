@@ -41,9 +41,9 @@ static func map() -> Array[KeyRemap]:
 	# Example:
 	return [
 		# In Insert mode, return to Normal mode with "jk"
-		KeyRemap.new([ "j", "i" ])
-			.action("normal", { "backspaces": 1, "offset": 0 })
-			.with_context(Mode.INSERT),
+		# KeyRemap.new([ "j", "k" ])
+			# .action("normal", { "backspaces": 1, "offset": 0 })
+			# .with_context(Mode.INSERT),
 		
 		# Make "/" search in case insensitive mode
 		# KeyRemap.new([ "/" ])
