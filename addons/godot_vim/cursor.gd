@@ -311,9 +311,17 @@ func is_uppercase(text: String) -> bool:
 
 func is_line_section(text: String) -> bool:
 	var t: String = text.strip_edges()
-	return text.begins_with("func")\
-		or text.begins_with("class")\
-		or text.begins_with("#region")
+	
+	match language:
+		LANGUAGE.SHADER:
+			return t.ends_with("{") and !SPACES.contains(text.left(1))
+		LANGUAGE.GDSCRIPT:
+			return t.begins_with("func")\
+				or t.begins_with("class")\
+				or t.begins_with("#region")
+		_:
+			return false
+
 
 func get_stream_char(stream: String, idx: int) -> String:
 	return stream[idx] if stream.length() > idx else ''

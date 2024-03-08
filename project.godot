@@ -20,4 +20,4 @@ project/assembly_name="Godot Vim"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/godot_vim/plugin.cfg", "res://addons/zylann.editor_debugger/plugin.cfg")
+enabled=PackedStringArray("res://addons/godot_vim/plugin.cfg")
