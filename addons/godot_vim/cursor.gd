@@ -82,7 +82,7 @@ func _input(event: InputEvent):
 # Mostly used for commands like "w", "b", and "e"
 # Bitmask bits:
 #  0 = char is normal char, 1 = char is keyword, 2 = chcar is space
-# TODO bug where it doesn't stop at line start: func get_char_wrapping()
+# FIXME bug where it doesn't stop at line start: func get_char_wrapping()
 func get_word_edge_pos(from_line: int, from_col: int, forward: bool, word_end: bool, big_word: bool) -> Vector2i:
 	var search_dir: int = int(forward) - int(!forward) # 1 if forward else -1
 	var line: int = from_line
@@ -95,13 +95,13 @@ func get_word_edge_pos(from_line: int, from_col: int, forward: bool, word_end: b
 	while line >= 0 and line < code_edit.get_line_count():
 		while col >= 0 and col < text.length():
 			var char: String = text[col]
-			var right: String = ' ' if col == text.length()-1 else text[col + 1] # ' ' if eol else the char to the right
+			var right: String = ' ' if col == text.length()-1 else text[col + 1] # ' ' if eol; else, the char to the right
 			
 			var a: int = (int(KEYWORDS.contains(char)) | (int(SPACES.contains(char)) << 1)) & big_word_mask
 			var b: int = (int(KEYWORDS.contains(right)) | (int(SPACES.contains(right)) << 1)) & big_word_mask
 			
 			# Same as:	if a != b and (a if word_end else b) != 2	but without branching
-			if a != b and a*int(word_end) + b*int(!word_end) != 2:
+			if a != b and a*int(word_end) + b*int(!word_end) != 0b10:
 				return Vector2i(col + int(!word_end), line)
 			
 			col += search_dir
@@ -291,8 +291,16 @@ func set_column(position: int):
 	selection_to = Vector2i( clampi(position, 0, get_line_length(selection_to.y)), clampi(selection_to.y, 0, code_edit.get_line_count()) )
 	update_visual_selection()
 
+func select(from_line: int, from_col: int, to_line: int, to_col: int):
+	code_edit.select(from_line, from_col, to_line, to_col + 1)
+	selection_from = Vector2i(from_col, from_line)
+	selection_to = Vector2i(to_col, to_line)
+	set_caret_pos(selection_to.y, selection_to.x)
+	# status_bar.set_mode_text(Mode.VISUAL)
+
 func update_visual_selection():
 	if mode == Mode.VISUAL:
+		# FIXME
 		var to_right: bool = selection_to.x >= selection_from.x or selection_to.y > selection_from.y
 		code_edit.select( selection_from.y, selection_from.x + int(!to_right), selection_to.y, selection_to.x + int(to_right) )
 	elif mode == Mode.VISUAL_LINE:
@@ -520,6 +528,22 @@ func cmd_move_by_section(args: Dictionary) -> Vector2i:
 	return section_edge
 
 
+#region TEXT OBJECTS
+# Text Object commands must return two Vector2is with the cursor start and end position
+
+## TODO
+func cmd_text_object_word(args: Dictionary) -> Array[Vector2i]:
+	# print("[cmd_text_object_word()] args = ", args)
+	var p: Vector2i = get_caret_pos()
+	var p0: Vector2i = get_word_edge_pos(p.y, p.x + 1, false, false, false)
+	var p1: Vector2i = get_word_edge_pos(p.y, p.x - 1, true, true, false)
+	
+	return [ p0, p1 ]
+
+#endregion TEXT OBJECTS
+
+
+
 #endregion MOTIONS
 
 #region ACTIONS
@@ -572,7 +596,7 @@ func cmd_normal(args: Dictionary):
 		move_column( args.offset )
 
 ## Switches to Visual mode
-## if "line_wise" (optional) is true, it will switch to VisualLine instead
+## if "line_wise": bool (optional) is true, it will switch to VisualLine instead
 func cmd_visual(args: Dictionary):
 	if args.get('line_wise', false):
 		set_mode(Mode.VISUAL_LINE)

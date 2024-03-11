@@ -41,14 +41,14 @@ static func map() -> Array[KeyRemap]:
 	# Example:
 	return [
 		# In Insert mode, return to Normal mode with "jk"
-		# KeyRemap.new([ "j", "k" ])
-			# .action("normal", { "backspaces": 1, "offset": 0 })
-			# .with_context(Mode.INSERT),
+		KeyRemap.new([ "j", "i" ])
+			.action("normal", { "backspaces": 1, "offset": 0 })
+			.with_context(Mode.INSERT),
 		
 		# Make "/" search in case insensitive mode
-		# KeyRemap.new([ "/" ])
-			# .action("command", { "command": "/(?i)" })
-			# .replace(),
+		KeyRemap.new([ "/" ])
+			.action("command", { "command": "/(?i)" })
+			.replace(),
 		
 		# In Insert mode, return to Normal mode with "Ctrl-["
 		# KeyRemap.new([ "<C-[>" ])
@@ -124,6 +124,10 @@ var key_map: Array[Dictionary] = [
 	{ "keys": ["g", "m"], "type": Motion, "motion": { "type": "move_to_center_of_line" } },
 	{ "keys": ["n"], "type": Motion, "motion": { "type": "find_again", "forward": true } },
 	{ "keys": ["N"], "type": Motion, "motion": { "type": "find_again", "forward": false } },
+	
+	# Text objects
+	# { "keys": ["a", "w"], "type": Motion, "motion": { "type": "text_object_word", "inner": false, "inclusive": false } },
+	{ "keys": ["i", "w"], "type": Motion, "motion": { "type": "text_object_word", "inner": true, "inclusive": true } },
 	
 	# OPERATORS
 	{ "keys": ["d"], "type": Operator, "operator": { "type": "delete" } },
@@ -244,11 +248,13 @@ func register_event(event: InputEventKey, with_context: Mode) -> Dictionary:
 
 
 func parse_keys(keys: Array[String], with_context: Mode) -> Dictionary:
-	var cmd: Dictionary = find_cmd(keys, with_context)
+	var blacklist: Array = get_blacklist_types_in_context(with_context)
+	var cmd: Dictionary = find_cmd(keys, with_context, blacklist)
 	if cmd.is_empty() or cmd.type == NotFound:
 		call_deferred(&"clear")
 		return cmd
 	if cmd.type == Incomplete:
+		# print(cmd)
 		return cmd
 	
 	# Execute the operation as-is if in VISUAL mode
@@ -258,7 +264,8 @@ func parse_keys(keys: Array[String], with_context: Mode) -> Dictionary:
 		if op_args.is_empty(): # Incomplete; await further input
 			return { 'type': Incomplete }
 		
-		var next: Dictionary = find_cmd(op_args, with_context)
+		var next: Dictionary = find_cmd(op_args, with_context, [ Action, OperatorMotion ])
+		
 		if next.is_empty() or next.type == NotFound: # Invalid sequence
 			call_deferred(&"clear")
 			return { 'type': NotFound }
@@ -270,8 +277,53 @@ func parse_keys(keys: Array[String], with_context: Mode) -> Dictionary:
 	call_deferred(&"clear")
 	return cmd
 
+## The returned cmd will always have a 'type' key
+# TODO make bitmask
+func find_cmd(keys: Array[String], with_context: Mode, blacklist: Array = []) -> Dictionary:
+	var partial: bool = false # In case none were found
+	var is_visual: bool = with_context == Mode.VISUAL or with_context == Mode.VISUAL_LINE
+	
+	for cmd in key_map:
+		# FILTERS
+		# Don't allow anything in Insert mode unless specified
+		if with_context == Mode.INSERT and cmd.get("context", -1) != Mode.INSERT:
+			continue
+		
+		if blacklist.has(cmd.type):
+			continue
+		
+		""" TODO delete
+		# Allow Operators to be executed as-is (without additional motion) in visual mode
+		if !(cmd.type == Operator and is_visual):
+			# Check context for other commands
+			if cmd.has("context") and with_context != cmd.context:
+				continue
+		"""
+		
+		# Skip if contexts don't match
+		if cmd.has("context") and with_context != cmd.context:
+			continue
+		
+		# CHECK KEYS
+		var m: KeyMatch = match_keys(cmd.keys, keys)
+		partial = partial or m == KeyMatch.Partial # Set/keep partial = true if it was a partial match
+		
+		if m != KeyMatch.Full:
+			continue
+		
+		var cmd_mut: Dictionary = cmd.duplicate(true) # 'mut' ('mutable') because key_map is read-only
+		# Keep track of selected character, which will later be copied into the fucntion call for the command
+		# (See execute() where we check if cmd.has('selected_char'))
+		if cmd.keys[-1] == '{char}':
+			cmd_mut.selected_char = keys.back()
+		return cmd_mut
+	
+	return { "type": Incomplete if partial else NotFound }
+
+""" Old find_cmd	TODO delete
 
 ## The returned cmd will always have a 'type' key
+# TODO make bitmask
 func find_cmd(keys: Array[String], with_context: Mode) -> Dictionary:
 	var partial: bool = false # In case none were found
 	var is_visual: bool = with_context == Mode.VISUAL or with_context == Mode.VISUAL_LINE
@@ -300,6 +352,7 @@ func find_cmd(keys: Array[String], with_context: Mode) -> Dictionary:
 		# CHECK KEYS
 		var m: KeyMatch = match_keys(cmd.keys, keys)
 		partial = partial or m == KeyMatch.Partial # Set/keep partial = true if it was a partial match
+		
 		if m != KeyMatch.Full:
 			continue
 		
@@ -311,6 +364,17 @@ func find_cmd(keys: Array[String], with_context: Mode) -> Dictionary:
 		return cmd_mut
 	
 	return { "type": Incomplete if partial else NotFound }
+"""
+
+
+# TODO make bitmask instead of Array
+func get_blacklist_types_in_context(context: Mode) -> Array:
+	match context:
+		Mode.VISUAL, Mode.VISUAL_LINE:
+			return [ OperatorMotion, Action ]
+		_:
+			return []
+
 
 func execute_operator_motion(cmd: Dictionary):
 	if cmd.has('motion'):
@@ -347,8 +411,13 @@ func execute_action(cmd: Dictionary):
 func execute_motion(cmd: Dictionary):
 	if cmd.has('selected_char'):
 		cmd.motion.selected_char = cmd.selected_char
-	var pos: Vector2i = call_cmd(cmd.motion)
-	cursor.set_caret_pos(pos.y, pos.x)
+	var pos = call_cmd(cmd.motion) # Vector2i for normal motion, or [Vector2i, Vector2i] for text object
+	
+	if pos is Vector2i:
+		cursor.set_caret_pos(pos.y, pos.x)
+	elif pos is Array:
+		# print("[execute_motion() -> text obj] pos = ", pos)
+		cursor.select(pos[0].y, pos[0].x, pos[1].y, pos[1].x)
 
 func execute(cmd: Dictionary):
 	if !is_cmd_valid(cmd):
@@ -371,11 +440,18 @@ func operator_motion(operator: Dictionary, motion: Dictionary):
 	# print("[KeyMay::execute_operator_motion()] op = ", operator, ", motion = ", motion) # DEBUG
 
 	# Execute motion before operation
-	var p0: Vector2i = cursor.get_caret_pos()
-	var p1: Vector2i = call_cmd(motion)
-	if motion.get('inclusive', false):
-		p1.x += 1
-	cursor.code_edit.select(p0.y, p0.x, p1.y, p1.x)
+	var p = call_cmd(motion) # Vector2i for normal motion, or [Vector2i, Vector2i] for text object
+	if p is Vector2i:
+		var p0: Vector2i = cursor.get_caret_pos()
+		if motion.get('inclusive', false):
+			p.x += 1
+		cursor.code_edit.select(p0.y, p0.x, p.y, p.x)
+	elif p is Array:
+		# FIXME what to do if motion.inclusive?
+		if motion.get('inclusive', false):
+			print('a')
+			p[1].x += 1
+		cursor.code_edit.select(p[0].y, p[0].x, p[1].y, p[1].x)
 	
 	# Add line_wise flag if line wise motion
 	var op: Dictionary = operator.duplicate()
