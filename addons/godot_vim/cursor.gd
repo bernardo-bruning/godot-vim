@@ -80,29 +80,28 @@ func _input(event: InputEvent):
 
 
 # Mostly used for commands like "w", "b", and "e"
-# Bitmask bits:
-#  0 = char is normal char, 1 = char is keyword, 2 = chcar is space
-# FIXME bug where it doesn't stop at line start: func get_char_wrapping()
+# Char groups:  0 = char is normal char, 1 = char is keyword, 2 = char is space
 func get_word_edge_pos(from_line: int, from_col: int, forward: bool, word_end: bool, big_word: bool) -> Vector2i:
 	var search_dir: int = int(forward) - int(!forward) # 1 if forward else -1
 	var line: int = from_line
-	# Nudge it by (going backwards) + (word end ("e") or beginning ("b"))
-	var col: int = from_col + search_dir * (int(!forward) + int(word_end == forward))
+	# Think of `col` as the place in between the two chars we're testing
+	var col: int = from_col + search_dir\
+		+ int(word_end) # Also nudge it forward once if checking word ends ("e" or "ge")
 	# Cancel 1st bit (keywords) if big word so that keywords and normal chars are treated the same
 	var big_word_mask: int = 0b10 if big_word else 0b11
 	
 	var text: String = get_line_text(line)
 	while line >= 0 and line < code_edit.get_line_count():
-		while col >= 0 and col < text.length():
-			var char: String = text[col]
-			var right: String = ' ' if col == text.length()-1 else text[col + 1] # ' ' if eol; else, the char to the right
+		while col >= 0 and col <= text.length():
+			# Get "group" of chars to the left and right of `col`
+			var left_char: String = ' ' if col == 0 else text[col - 1]
+			var right_char: String = ' ' if col == text.length() else text[col] # ' ' if eol; else, the char to the right
+			var lg: int = (int(KEYWORDS.contains(left_char)) | (int(SPACES.contains(left_char)) << 1)) & big_word_mask
+			var rg: int = (int(KEYWORDS.contains(right_char)) | (int(SPACES.contains(right_char)) << 1)) & big_word_mask
 			
-			var a: int = (int(KEYWORDS.contains(char)) | (int(SPACES.contains(char)) << 1)) & big_word_mask
-			var b: int = (int(KEYWORDS.contains(right)) | (int(SPACES.contains(right)) << 1)) & big_word_mask
-			
-			# Same as:	if a != b and (a if word_end else b) != 2	but without branching
-			if a != b and a*int(word_end) + b*int(!word_end) != 0b10:
-				return Vector2i(col + int(!word_end), line)
+			# Same as:	if lg != rg and (lg if word_end else rg) != 2	but without branching
+			if lg != rg and lg*int(word_end) + rg*int(!word_end) != 0b10:
+				return Vector2i(col - int(word_end), line)
 			
 			col += search_dir
 		line += search_dir
@@ -160,7 +159,6 @@ func find_char_in_line(line: int, from_col: int, forward: bool, stop_before: boo
 	return col + (int(!forward) - int(forward)) * int(stop_before)
 
 
-# TODO maybe cache if it's going to be an issue
 func get_comment_char() -> String:
 	match language:
 		LANGUAGE.SHADER:
@@ -531,7 +529,7 @@ func cmd_move_by_section(args: Dictionary) -> Vector2i:
 #region TEXT OBJECTS
 # Text Object commands must return two Vector2is with the cursor start and end position
 
-## TODO
+## TODO "aw" word object
 func cmd_text_object_word(args: Dictionary) -> Array[Vector2i]:
 	# print("[cmd_text_object_word()] args = ", args)
 	var p: Vector2i = get_caret_pos()

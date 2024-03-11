@@ -278,7 +278,7 @@ func parse_keys(keys: Array[String], with_context: Mode) -> Dictionary:
 	return cmd
 
 ## The returned cmd will always have a 'type' key
-# TODO make bitmask
+# TODO use bitmask instead of Array
 func find_cmd(keys: Array[String], with_context: Mode, blacklist: Array = []) -> Dictionary:
 	var partial: bool = false # In case none were found
 	var is_visual: bool = with_context == Mode.VISUAL or with_context == Mode.VISUAL_LINE
@@ -291,14 +291,6 @@ func find_cmd(keys: Array[String], with_context: Mode, blacklist: Array = []) ->
 		
 		if blacklist.has(cmd.type):
 			continue
-		
-		""" TODO delete
-		# Allow Operators to be executed as-is (without additional motion) in visual mode
-		if !(cmd.type == Operator and is_visual):
-			# Check context for other commands
-			if cmd.has("context") and with_context != cmd.context:
-				continue
-		"""
 		
 		# Skip if contexts don't match
 		if cmd.has("context") and with_context != cmd.context:
@@ -320,54 +312,8 @@ func find_cmd(keys: Array[String], with_context: Mode, blacklist: Array = []) ->
 	
 	return { "type": Incomplete if partial else NotFound }
 
-""" Old find_cmd	TODO delete
 
-## The returned cmd will always have a 'type' key
-# TODO make bitmask
-func find_cmd(keys: Array[String], with_context: Mode) -> Dictionary:
-	var partial: bool = false # In case none were found
-	var is_visual: bool = with_context == Mode.VISUAL or with_context == Mode.VISUAL_LINE
-	
-	for cmd in key_map:
-		# FILTERS
-		# Don't allow anything in Insert mode unless specified
-		if with_context == Mode.INSERT and cmd.get("context", -1) != Mode.INSERT:
-			continue
-		
-		# OperatorMotions in visual mode aren't allowed
-		if cmd.type == OperatorMotion and is_visual:
-			continue
-		
-		# Don't allow Actions in Visual mode unless specified
-		if cmd.type == Action and is_visual\
-			and !(cmd.has("context") and cursor.is_mode_visual(cmd.context)):
-			continue
-		
-		# Allow Operators to be executed as-is (without additional motion) in visual mode
-		if !(cmd.type == Operator and is_visual):
-			# Check context for other commands
-			if cmd.has("context") and with_context != cmd.context:
-				continue
-		
-		# CHECK KEYS
-		var m: KeyMatch = match_keys(cmd.keys, keys)
-		partial = partial or m == KeyMatch.Partial # Set/keep partial = true if it was a partial match
-		
-		if m != KeyMatch.Full:
-			continue
-		
-		var cmd_mut: Dictionary = cmd.duplicate(true) # 'mut' ('mutable') because key_map is read-only
-		# Keep track of selected character, which will later be copied into the fucntion call for the command
-		# (See execute() where we check if cmd.has('selected_char'))
-		if cmd.keys[-1] == '{char}':
-			cmd_mut.selected_char = keys.back()
-		return cmd_mut
-	
-	return { "type": Incomplete if partial else NotFound }
-"""
-
-
-# TODO make bitmask instead of Array
+# TODO use bitmask instead of Array
 func get_blacklist_types_in_context(context: Mode) -> Array:
 	match context:
 		Mode.VISUAL, Mode.VISUAL_LINE:
