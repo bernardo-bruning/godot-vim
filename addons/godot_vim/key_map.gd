@@ -125,9 +125,13 @@ var key_map: Array[Dictionary] = [
 	{ "keys": ["n"], "type": Motion, "motion": { "type": "find_again", "forward": true } },
 	{ "keys": ["N"], "type": Motion, "motion": { "type": "find_again", "forward": false } },
 	
-	# Text objects
-	# { "keys": ["a", "w"], "type": Motion, "motion": { "type": "text_object_word", "inner": false, "inclusive": false } },
+	# TEXT OBJECTS
+	# { "keys": ["a", "w"], "type": Motion, "motion": { "type": "text_object_word", "inner": false, "inclusive": false } }, # TODO
+	# { "keys": ["a", "W"], "type": Motion, "motion": { "type": "text_object_word", "inner": false, "inclusive": false } }, # TODO
 	{ "keys": ["i", "w"], "type": Motion, "motion": { "type": "text_object_word", "inner": true, "inclusive": true } },
+	{ "keys": ["i", "W"], "type": Motion, "motion": { "type": "text_object_word", "inner": true, "big_word": true, "inclusive": true } },
+	# { "keys": ["a", "p"], "type": Motion, "motion": { "type": "text_object_paragraph", "inner": false, "line_wise": true } }, # TODO
+	{ "keys": ["i", "p"], "type": Motion, "motion": { "type": "text_object_paragraph", "inner": true, "line_wise": true } },
 	
 	# OPERATORS
 	{ "keys": ["d"], "type": Operator, "operator": { "type": "delete" } },

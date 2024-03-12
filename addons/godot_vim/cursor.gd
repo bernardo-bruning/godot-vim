@@ -529,14 +529,33 @@ func cmd_move_by_section(args: Dictionary) -> Vector2i:
 #region TEXT OBJECTS
 # Text Object commands must return two Vector2is with the cursor start and end position
 
-## TODO "aw" word object
+## TODO "aw" word object ("inner" = false). See `var key_map` in KeyMap
 func cmd_text_object_word(args: Dictionary) -> Array[Vector2i]:
 	# print("[cmd_text_object_word()] args = ", args)
-	var p: Vector2i = get_caret_pos()
-	var p0: Vector2i = get_word_edge_pos(p.y, p.x + 1, false, false, false)
-	var p1: Vector2i = get_word_edge_pos(p.y, p.x - 1, true, true, false)
+	var is_big_word: bool = args.get("big_word", false)
 	
-	return [ p0, p1 ]
+	var p: Vector2i = get_caret_pos()
+	return [
+		get_word_edge_pos(p.y, p.x + 1, false, false, is_big_word),
+		get_word_edge_pos(p.y, p.x - 1, true, true, is_big_word)
+	]
+
+## TODO "ap" word object ("inner" = false). See `var key_map` in KeyMap
+## Warning: changes the current mode to VISUAL_LINE if in VISUAL
+func cmd_text_object_paragraph(args: Dictionary) -> Array[Vector2i]:
+	# print("[cmd_text_object_paragraph()] args = ", args)
+	
+	var p: Vector2i = get_caret_pos()
+	var p0: Vector2i = get_paragraph_edge_pos(p.y, false)
+	var p1: Vector2i = get_paragraph_edge_pos(p.y, true)
+	
+	if mode == Mode.VISUAL:
+		set_mode(Mode.VISUAL_LINE)
+	
+	return [
+		p0 + Vector2i.DOWN,
+		p1 + Vector2i.UP
+	]
 
 #endregion TEXT OBJECTS
 
