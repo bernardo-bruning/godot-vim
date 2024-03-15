@@ -203,12 +203,16 @@ var key_map: Array[Dictionary] = [
 	{ "keys": ["z", "z"], "type": Action, "action": { "type": "center_caret" } },
 	{ "keys": ["m", "{char}"], "type": Action, "action": { "type": "mark" } },
 	{ "keys": ["`", "{char}"], "type": Action, "action": { "type": "jump_to_mark" } },
+	
+	# MISCELLANEOUS
+	{ "keys": ["o"], "type": Operator, "context": Mode.VISUAL, "operator": { "type": "visual_jump_to_other_end" } },
+	{ "keys": ["o"], "type": Operator, "context": Mode.VISUAL_LINE, "operator": { "type": "visual_jump_to_other_end" } },
 ]
 
 # Keys we won't handle
 const BLACKLIST: Array[String] = [
 	"<C-s>", # Save
-	"<C-b>", # Bookmark (marks arent' implemented yet)
+	"<C-b>", # Bookmark
 ]
 
 enum KeyMatch {

@@ -15,8 +15,11 @@ var status_bar: StatusBar
 var key_map: KeyMap
 
 var mode: Mode = Mode.NORMAL
-var selection_from: Vector2i = Vector2i() # For visual modes
-var selection_to: Vector2i = Vector2i() # For visual modes
+# For visual modes:
+# `selection_from` is the origin point of the selection
+# code_edit's caret pos is the end point of the selection (the one the user can move)
+var selection_from: Vector2i = Vector2i()
+
 var globals: Dictionary = {}
 
 func _init():
@@ -39,7 +42,6 @@ func focus_entered():
 func reset_normal():
 	set_mode(Mode.NORMAL)
 	selection_from = Vector2i.ZERO
-	selection_to = Vector2i.ZERO
 	set_column(code_edit.get_caret_column())
 
 
@@ -81,13 +83,13 @@ func _input(event: InputEvent):
 
 
 # Mostly used for commands like "w", "b", and "e"
-# Char groups:  0 = char is normal char, 1 = char is keyword, 2 = char is space
 func get_word_edge_pos(from_line: int, from_col: int, forward: bool, word_end: bool, big_word: bool) -> Vector2i:
 	var search_dir: int = int(forward) - int(!forward) # 1 if forward else -1
 	var line: int = from_line
 	# Think of `col` as the place in between the two chars we're testing
 	var col: int = from_col + search_dir\
-		+ int(word_end) # Also nudge it forward once if checking word ends ("e" or "ge")
+		+ int(word_end) # Also nudge it once if checking word ends ("e" or "ge")
+	# Char groups:  0 = char is normal char, 1 = char is keyword, 2 = char is space
 	# Cancel 1st bit (keywords) if big word so that keywords and normal chars are treated the same
 	var big_word_mask: int = 0b10 if big_word else 0b11
 	
@@ -101,7 +103,8 @@ func get_word_edge_pos(from_line: int, from_col: int, forward: bool, word_end: b
 			var rg: int = (int(KEYWORDS.contains(right_char)) | (int(SPACES.contains(right_char)) << 1)) & big_word_mask
 			
 			# Same as:	if lg != rg and (lg if word_end else rg) != 2	but without branching
-			if lg != rg and lg*int(word_end) + rg*int(!word_end) != 0b10:
+			# (is different group) and (spaces don't count in the wrong direction)
+			if lg != rg            and lg*int(word_end) + rg*int(!word_end) != 0b10:
 				return Vector2i(col - int(word_end), line)
 			
 			col += search_dir
@@ -114,7 +117,7 @@ func get_word_edge_pos(from_line: int, from_col: int, forward: bool, word_end: b
 
 # Get the 'edge' or a paragraph (like with { or } motions)
 func get_paragraph_edge_pos(from_line: int, forward: bool) -> Vector2i:
-	var search_dir: int = int(forward) - int(!forward)
+	var search_dir: int = int(forward) - int(!forward) # 1 if forward else -1
 	var line: int = from_line
 	var prev_empty: bool = code_edit.get_line(line) .strip_edges().is_empty()
 	line += search_dir
@@ -193,13 +196,13 @@ func set_mode(m: int):
 	var old_mode: int = mode
 	mode = m
 	command_line.close()
+	
 	match mode:
 		Mode.NORMAL:
 			code_edit.call_deferred("cancel_code_completion")
 			key_map.clear()
 			
 			code_edit.remove_secondary_carets() # Secondary carets are used when searching with '/' (See command_line.gd)
-			code_edit.deselect()
 			code_edit.release_focus()
 			code_edit.deselect()
 			self.grab_focus()
@@ -213,15 +216,11 @@ func set_mode(m: int):
 		Mode.VISUAL:
 			if old_mode != Mode.VISUAL_LINE:
 				selection_from = Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
-				selection_to = Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
-			set_caret_pos(selection_to.y, selection_to.x)
 			status_bar.set_mode_text(Mode.VISUAL)
 		
 		Mode.VISUAL_LINE:
 			if old_mode != Mode.VISUAL:
 				selection_from = Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
-				selection_to = Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
-			set_caret_pos(selection_to.y, selection_to.x)
 			status_bar.set_mode_text(Mode.VISUAL_LINE)
 		
 		Mode.COMMAND:
@@ -245,8 +244,6 @@ func move_line(offset:int):
 	set_line(get_line() + offset)
 
 func get_line() -> int:
-	if is_mode_visual(mode):
-		return selection_to.y
 	return code_edit.get_caret_line()
 
 func get_line_text(line: int = -1) -> String:
@@ -265,41 +262,34 @@ func get_caret_pos() -> Vector2i:
 	return Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
 
 func set_line(position:int):
-	if !is_mode_visual(mode):
-		code_edit.set_caret_line(min(position, code_edit.get_line_count()-1))
-		return
+	code_edit.set_caret_line(min(position, code_edit.get_line_count()-1))
 	
-	selection_to = Vector2i( clampi(selection_to.x, 0, get_line_length(position)), clampi(position, 0, code_edit.get_line_count()) )
-	update_visual_selection()
+	if is_mode_visual(mode):
+		update_visual_selection()
 
 
 func move_column(offset: int):
 	set_column(get_column()+offset)
 	
 func get_column():
-	if is_mode_visual(mode):
-		return selection_to.x
 	return code_edit.get_caret_column()
 
 func set_column(position: int):
-	if !is_mode_visual(mode):
-		var line: String = code_edit.get_line(code_edit.get_caret_line())
-		code_edit.set_caret_column(min(line.length(), position))
-		return
+	code_edit.set_caret_column(min(get_line_length(), position))
 	
-	selection_to = Vector2i( clampi(position, 0, get_line_length(selection_to.y)), clampi(selection_to.y, 0, code_edit.get_line_count()) )
-	update_visual_selection()
+	if is_mode_visual(mode):
+		update_visual_selection()
 
 func select(from_line: int, from_col: int, to_line: int, to_col: int):
 	code_edit.select(from_line, from_col, to_line, to_col + 1)
 	selection_from = Vector2i(from_col, from_line)
-	selection_to = Vector2i(to_col, to_line)
-	set_caret_pos(selection_to.y, selection_to.x)
+	set_caret_pos(to_line, to_col)
 	# status_bar.set_mode_text(Mode.VISUAL)
 
 func update_visual_selection():
+	var selection_to: Vector2i = Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
 	if mode == Mode.VISUAL:
-		var backwards: bool = selection_to.x < selection_from.x or selection_to.y < selection_from.y
+		var backwards: bool = selection_to.x < selection_from.x if selection_to.y == selection_from.y else selection_to.y < selection_from.y
 		code_edit.select(selection_from.y, selection_from.x + int(backwards), selection_to.y, selection_to.x + int(!backwards))
 	elif mode == Mode.VISUAL_LINE:
 		var f: int = mini(selection_from.y, selection_to.y) - 1
@@ -335,7 +325,6 @@ func get_stream_char(stream: String, idx: int) -> String:
 func draw_cursor():
 	if code_edit.is_dragging_cursor():
 		selection_from = Vector2i(code_edit.get_selection_from_column(), code_edit.get_selection_from_line())
-		selection_to = Vector2i(code_edit.get_selection_to_column(), code_edit.get_selection_to_line())
 	
 	if code_edit.get_selected_text(0).length() > 1 and !is_mode_visual(mode):
 		code_edit.release_focus()
@@ -826,6 +815,18 @@ func cmd_toggle_uppercase(_args: Dictionary):
 	
 	set_mode(Mode.NORMAL)
 
+
 #endregion OPERATIONS
+
+## Corresponds to 'o' in Visual mode in regular Vim
+func cmd_visual_jump_to_other_end(args: Dictionary):
+	if !is_mode_visual(mode):
+		push_warning("[GodotVim] Attempting to jump to other end of selection while not in VISUAL mode. Ignoring...")
+		return
+	
+	var p: Vector2i = selection_from
+	selection_from = get_caret_pos()
+	set_caret_pos(p.y, p.x)
+
 
 #endregion COMMANDS
