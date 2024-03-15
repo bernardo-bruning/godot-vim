@@ -60,6 +60,7 @@ func _input(event: InputEvent):
 	# See KeyMap.key_map, KeyMap.register_event()
 	var registered_cmd: Dictionary = key_map.register_event(event, mode)
 	
+	# Display keys in status bar
 	if mode == Mode.NORMAL or is_mode_visual(mode):
 		status_bar.set_keys_text(key_map.get_input_stream_as_string())
 	else:
@@ -298,9 +299,8 @@ func select(from_line: int, from_col: int, to_line: int, to_col: int):
 
 func update_visual_selection():
 	if mode == Mode.VISUAL:
-		# FIXME
-		var to_right: bool = selection_to.x >= selection_from.x or selection_to.y > selection_from.y
-		code_edit.select( selection_from.y, selection_from.x + int(!to_right), selection_to.y, selection_to.x + int(to_right) )
+		var backwards: bool = selection_to.x < selection_from.x or selection_to.y < selection_from.y
+		code_edit.select(selection_from.y, selection_from.x + int(backwards), selection_to.y, selection_to.x + int(!backwards))
 	elif mode == Mode.VISUAL_LINE:
 		var f: int = mini(selection_from.y, selection_to.y) - 1
 		var t: int = maxi(selection_from.y, selection_to.y)
@@ -531,7 +531,9 @@ func cmd_move_by_section(args: Dictionary) -> Vector2i:
 
 ## TODO "aw" word object ("inner" = false). See `var key_map` in KeyMap
 func cmd_text_object_word(args: Dictionary) -> Array[Vector2i]:
-	# print("[cmd_text_object_word()] args = ", args)
+	if !args.get("inner", false):
+		push_warning("[GodotVIM] Not yet implemented: Outer word text object (aw, aW)")
+	
 	var is_big_word: bool = args.get("big_word", false)
 	
 	var p: Vector2i = get_caret_pos()
@@ -543,7 +545,8 @@ func cmd_text_object_word(args: Dictionary) -> Array[Vector2i]:
 ## TODO "ap" word object ("inner" = false). See `var key_map` in KeyMap
 ## Warning: changes the current mode to VISUAL_LINE if in VISUAL
 func cmd_text_object_paragraph(args: Dictionary) -> Array[Vector2i]:
-	# print("[cmd_text_object_paragraph()] args = ", args)
+	if !args.get("inner", false):
+		push_warning("[GodotVIM] Not yet implemented: Outer paragraph text object (ap)")
 	
 	var p: Vector2i = get_caret_pos()
 	var p0: Vector2i = get_paragraph_edge_pos(p.y, false)
@@ -556,6 +559,11 @@ func cmd_text_object_paragraph(args: Dictionary) -> Array[Vector2i]:
 		p0 + Vector2i.DOWN,
 		p1 + Vector2i.UP
 	]
+
+
+# TODO
+func cmd_text_object_function(args: Dictionary) -> Array[Vector2i]:
+	return []
 
 #endregion TEXT OBJECTS
 
@@ -721,6 +729,7 @@ func cmd_delete(args: Dictionary):
 		call_deferred(&"move_line", +1)
 	
 	code_edit.cut()
+	
 	if mode != Mode.NORMAL:
 		set_mode(Mode.NORMAL)
 
@@ -776,7 +785,9 @@ func cmd_indent(args: Dictionary):
 
 ## Toggles whether the selected line(s) are commented
 func cmd_comment(_args: Dictionary):
-	var l0: int = code_edit.get_selection_from_line()
+	var l0: int = code_edit.get_selection_from_line()\
+		# Fix bug where it comments one line above in VISUAL_LINE
+		+ int(mode == Mode.VISUAL_LINE)
 	var l1: int = code_edit.get_selection_to_line()
 	var do_comment: bool = !is_line_commented( mini(l0, l1) )
 	

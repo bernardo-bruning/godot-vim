@@ -126,11 +126,11 @@ var key_map: Array[Dictionary] = [
 	{ "keys": ["N"], "type": Motion, "motion": { "type": "find_again", "forward": false } },
 	
 	# TEXT OBJECTS
-	# { "keys": ["a", "w"], "type": Motion, "motion": { "type": "text_object_word", "inner": false, "inclusive": false } }, # TODO
-	# { "keys": ["a", "W"], "type": Motion, "motion": { "type": "text_object_word", "inner": false, "inclusive": false } }, # TODO
+	{ "keys": ["a", "w"], "type": Motion, "motion": { "type": "text_object_word", "inner": false, "inclusive": false } }, # TODO
+	{ "keys": ["a", "W"], "type": Motion, "motion": { "type": "text_object_word", "inner": false, "inclusive": false } }, # TODO
 	{ "keys": ["i", "w"], "type": Motion, "motion": { "type": "text_object_word", "inner": true, "inclusive": true } },
 	{ "keys": ["i", "W"], "type": Motion, "motion": { "type": "text_object_word", "inner": true, "big_word": true, "inclusive": true } },
-	# { "keys": ["a", "p"], "type": Motion, "motion": { "type": "text_object_paragraph", "inner": false, "line_wise": true } }, # TODO
+	{ "keys": ["a", "p"], "type": Motion, "motion": { "type": "text_object_paragraph", "inner": false, "line_wise": true } }, # TODO
 	{ "keys": ["i", "p"], "type": Motion, "motion": { "type": "text_object_paragraph", "inner": true, "line_wise": true } },
 	
 	# OPERATORS
@@ -182,6 +182,8 @@ var key_map: Array[Dictionary] = [
 	{ "keys": ["~"], "type": Operator, "context": Mode.VISUAL, "operator": { "type": "toggle_uppercase" } },
 	{ "keys": ["u"], "type": Operator, "context": Mode.VISUAL, "operator": { "type": "set_uppercase", "uppercase": false } },
 	{ "keys": ["U"], "type": Operator, "context": Mode.VISUAL, "operator": { "type": "set_uppercase", "uppercase": true } },
+	{ "keys": ["V"], "type": Operator, "context": Mode.VISUAL, "operator": { "type": "visual", "line_wise": true } },
+	{ "keys": ["v"], "type": Operator, "context": Mode.VISUAL_LINE, "operator": { "type": "visual", "line_wise": false } },
 	
 	# ACTIONS
 	{ "keys": ["i"], "type": Action, "action": { "type": "insert" } },
@@ -366,6 +368,7 @@ func execute_motion(cmd: Dictionary):
 	if pos is Vector2i:
 		cursor.set_caret_pos(pos.y, pos.x)
 	elif pos is Array:
+		assert(pos.size() == 2)
 		# print("[execute_motion() -> text obj] pos = ", pos)
 		cursor.select(pos[0].y, pos[0].x, pos[1].y, pos[1].x)
 
@@ -397,9 +400,8 @@ func operator_motion(operator: Dictionary, motion: Dictionary):
 			p.x += 1
 		cursor.code_edit.select(p0.y, p0.x, p.y, p.x)
 	elif p is Array:
-		# FIXME what to do if motion.inclusive?
+		assert(p.size() == 2)
 		if motion.get('inclusive', false):
-			print('a')
 			p[1].x += 1
 		cursor.code_edit.select(p[0].y, p[0].x, p[1].y, p[1].x)
 	
