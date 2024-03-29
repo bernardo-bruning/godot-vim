@@ -166,6 +166,7 @@ var key_map: Array[Dictionary] = [
 		"motion": { "type": "move_by_chars", "move_by": 1 }
 	},
 	{ "keys": ["p"], "type": Operator, "context": Mode.VISUAL, "operator": { "type": "paste" } },
+	{ "keys": ["p"], "type": Operator, "context": Mode.VISUAL_LINE, "operator": { "type": "paste" } },
 	
 	{ "keys": [">"], "type": Operator, "operator": { "type": "indent", "forward": true } },
 	{ "keys": ["<"], "type": Operator, "operator": { "type": "indent", "forward": false } },

@@ -70,6 +70,7 @@ func _input(event: InputEvent):
 	
 	if KeyMap.is_cmd_valid(registered_cmd):
 		code_edit.cancel_code_completion()
+		get_viewport().set_input_as_handled()
 
 
 ## TODO Old commands we are yet to move (delete as they get implemented)
@@ -217,11 +218,13 @@ func set_mode(m: int):
 			if old_mode != Mode.VISUAL_LINE:
 				selection_from = Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
 			status_bar.set_mode_text(Mode.VISUAL)
+			update_visual_selection()
 		
 		Mode.VISUAL_LINE:
 			if old_mode != Mode.VISUAL:
 				selection_from = Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
 			status_bar.set_mode_text(Mode.VISUAL_LINE)
+			update_visual_selection()
 		
 		Mode.COMMAND:
 			command_line.show()
@@ -749,13 +752,14 @@ func cmd_change(args: Dictionary):
 
 func cmd_paste(_args: Dictionary):
 	code_edit.begin_complex_operation()
-	if is_mode_visual(mode):
-		code_edit.delete_selection()
-	if DisplayServer.clipboard_get().begins_with('\r\n'):
-		set_column(get_line_length())
-	else:
-		move_column(+1)
-	code_edit.deselect()
+	
+	if !is_mode_visual(mode):
+		if DisplayServer.clipboard_get().begins_with('\r\n'):
+			set_column(get_line_length())
+		else:
+			move_column(+1)
+		code_edit.deselect()
+	
 	code_edit.paste()
 	move_column(-1)
 	code_edit.end_complex_operation()
