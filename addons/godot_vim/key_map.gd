@@ -85,6 +85,8 @@ enum {
 
 
 
+#region key_map
+
 # Also see the "COMMANDS" section at the bottom of cursor.gd
 #  Command for     { "type": "foo", ... }   is handled in Cursor::cmd_foo(args: Dictionary)
 #  where `args` is ^^^^^ this Dict ^^^^^^
@@ -105,12 +107,15 @@ var key_map: Array[Dictionary] = [
 	{ "keys": ["B"], "type": Motion, "motion": { "type": "move_by_word", "forward": false, "word_end": false, "big_word": true } },
 	{ "keys": ["g", "E"], "type": Motion, "motion": { "type": "move_by_word", "forward": false, "word_end": true, "big_word": true } },
 	
+	# Find & search
 	{ "keys": ["f", "{char}"], "type": Motion, "motion": { "type": "find_in_line", "forward": true, "inclusive": true } },
 	{ "keys": ["t", "{char}"], "type": Motion, "motion": { "type": "find_in_line", "forward": true, "stop_before": true, "inclusive": true } },
 	{ "keys": ["F", "{char}"], "type": Motion, "motion": { "type": "find_in_line", "forward": false } },
 	{ "keys": ["T", "{char}"], "type": Motion, "motion": { "type": "find_in_line", "forward": false, "stop_before": true } },
 	{ "keys": [";"], "type": Motion, "motion": { "type": "find_in_line_again", "invert": false } },
 	{ "keys": [","], "type": Motion, "motion": { "type": "find_in_line_again", "invert": true } },
+	{ "keys": ["n"], "type": Motion, "motion": { "type": "find_again", "forward": true } },
+	{ "keys": ["N"], "type": Motion, "motion": { "type": "find_again", "forward": false } },
 	
 	{ "keys": ["0"], "type": Motion, "motion": { "type": "move_to_bol" } },
 	{ "keys": ["$"], "type": Motion, "motion": { "type": "move_to_eol" } },
@@ -122,8 +127,8 @@ var key_map: Array[Dictionary] = [
 	{ "keys": ["g", "g"], "type": Motion, "motion": { "type": "move_to_bof", "line_wise": true } },
 	{ "keys": ["G"], "type": Motion, "motion": { "type": "move_to_eof", "line_wise": true } },
 	{ "keys": ["g", "m"], "type": Motion, "motion": { "type": "move_to_center_of_line" } },
-	{ "keys": ["n"], "type": Motion, "motion": { "type": "find_again", "forward": true } },
-	{ "keys": ["N"], "type": Motion, "motion": { "type": "find_again", "forward": false } },
+	{ "keys": ["<C-u>"], "type": Motion, "motion": { "type": "move_by_screen", "percentage": -0.5, "line_wise": true } },
+	{ "keys": ["<C-d>"], "type": Motion, "motion": { "type": "move_by_screen", "percentage": 0.5, "line_wise": true } },
 	
 	# TEXT OBJECTS
 	{ "keys": ["a", "w"], "type": Motion, "motion": { "type": "text_object_word", "inner": false, "inclusive": false } }, # TODO
@@ -132,6 +137,15 @@ var key_map: Array[Dictionary] = [
 	{ "keys": ["i", "W"], "type": Motion, "motion": { "type": "text_object_word", "inner": true, "big_word": true, "inclusive": true } },
 	{ "keys": ["a", "p"], "type": Motion, "motion": { "type": "text_object_paragraph", "inner": false, "line_wise": true } }, # TODO
 	{ "keys": ["i", "p"], "type": Motion, "motion": { "type": "text_object_paragraph", "inner": true, "line_wise": true } },
+	
+	{ "keys": ["i", "\""], "type": Motion, "motion": { "type": "text_object", "object": "\"", "inner": true, "inclusive": true } },
+	{ "keys": ["i", "'"], "type": Motion, "motion": { "type": "text_object", "object": "'", "inner": true, "inclusive": true } },
+	{ "keys": ["i", "`"], "type": Motion, "motion": { "type": "text_object", "object": "`", "inner": true, "inclusive": true } },
+	{ "keys": ["i", "("], "type": Motion, "motion": { "type": "text_object", "object": "(", "inner": true, "inclusive": true } },
+	{ "keys": ["i", "b"], "type": Motion, "motion": { "type": "text_object", "object": "(", "inner": true, "inclusive": true } },
+	{ "keys": ["i", "["], "type": Motion, "motion": { "type": "text_object", "object": "[", "inner": true, "inclusive": true } },
+	{ "keys": ["i", "{"], "type": Motion, "motion": { "type": "text_object", "object": "{", "inner": true, "inclusive": true } },
+	{ "keys": ["i", "B"], "type": Motion, "motion": { "type": "text_object", "object": "{", "inner": true, "inclusive": true } },
 	
 	# OPERATORS
 	{ "keys": ["d"], "type": Operator, "operator": { "type": "delete" } },
@@ -209,6 +223,9 @@ var key_map: Array[Dictionary] = [
 	{ "keys": ["o"], "type": Operator, "context": Mode.VISUAL, "operator": { "type": "visual_jump_to_other_end" } },
 	{ "keys": ["o"], "type": Operator, "context": Mode.VISUAL_LINE, "operator": { "type": "visual_jump_to_other_end" } },
 ]
+
+#endregion key_map
+
 
 # Keys we won't handle
 const BLACKLIST: Array[String] = [
@@ -289,7 +306,7 @@ func parse_keys(keys: Array[String], with_context: Mode) -> Dictionary:
 	return cmd
 
 ## The returned cmd will always have a 'type' key
-# TODO use bitmask instead of Array
+# TODO use bitmask instead of Array?
 func find_cmd(keys: Array[String], with_context: Mode, blacklist: Array = []) -> Dictionary:
 	var partial: bool = false # In case none were found
 	var is_visual: bool = with_context == Mode.VISUAL or with_context == Mode.VISUAL_LINE
@@ -324,7 +341,7 @@ func find_cmd(keys: Array[String], with_context: Mode, blacklist: Array = []) ->
 	return { "type": Incomplete if partial else NotFound }
 
 
-# TODO use bitmask instead of Array
+# TODO use bitmask instead of Array?
 func get_blacklist_types_in_context(context: Mode) -> Array:
 	match context:
 		Mode.VISUAL, Mode.VISUAL_LINE:

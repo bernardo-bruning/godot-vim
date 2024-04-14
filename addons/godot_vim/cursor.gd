@@ -7,6 +7,7 @@ const Mode = Constants.Mode
 const KEYWORDS = Constants.KEYWORDS
 const SPACES = Constants.SPACES
 const LANGUAGE = Constants.Language
+const BRACES = Constants.BRACES
 
 var code_edit: CodeEdit
 var language: LANGUAGE = LANGUAGE.GDSCRIPT
@@ -150,6 +151,9 @@ func get_section_edge_pos(from_line: int, forward: bool) -> Vector2i:
 
 
 
+## Finds the next -- or previous is `forward = false` -- occurence of `char` in the line `line`,
+##  starting from col `from_col`
+## Additionally, it can stop before the occurence with `stop_before = true`
 func find_char_in_line(line: int, from_col: int, forward: bool, stop_before: bool, char: String) -> int:
 	var text: String = get_line_text(line)
 	
@@ -162,6 +166,80 @@ func find_char_in_line(line: int, from_col: int, forward: bool, stop_before: boo
 	# where offset = ( int(!forward) - int(forward) ) * int(stop_before)
 	# 	= 1 if forward, -1 if !forward, 0 otherwise
 	return col + (int(!forward) - int(forward)) * int(stop_before)
+
+
+## Finds the next -- or previous if `forward = false` -- occurence of [param char]
+func find_next_occurence_of_char(
+	from_line: int,
+	from_col: int,
+	char: String,
+	forward: bool,
+) -> Vector2i:
+	var p: Vector2i = Vector2i(from_col, from_line)
+	var line_count: int = code_edit.get_line_count()
+	var search_dir: int = int(forward) - int(!forward) # 1 if forward, -1 if backwards
+	
+	var text: String = get_line_text(p.y)
+	while p.y >= 0 and p.y < line_count:
+		while p.x >= 0 and p.x < text.length():
+			if text[p.x] == char:
+				return p
+			p.x += search_dir
+		p.y += search_dir
+		text = get_line_text(p.y)
+		p.x = (text.length() - 1) * int(!forward) # 0 if forwards, EOL if backwards
+	# Not found
+	# i want optional typing to be in godot so bad
+	return Vector2i(-1, -1)
+
+
+## Finds the next / previous brace specified by `brace` and its closing `counterpart`
+## `force_inline` forces to look only in the line `from_line` (See constants.gd::INLINE_BRACKETS)
+## E.g.
+##  brace = "(", counterpart = ")", forward = false, from_line and from_col = cursor pos
+##  will find the start of the set of parantheses the cursor is inside of
+func find_brace(
+	from_line: int,
+	from_col: int,
+	brace: String,
+	counterpart: String,
+	forward: bool,
+	force_inline: bool = false,
+) -> Vector2i:
+	# Flip if going backwards
+	if !forward:
+		var b: String = brace
+		brace = counterpart
+		counterpart = b
+	
+	var line_count: int = code_edit.get_line_count()
+	var d: int = int(forward) - int(!forward)
+	
+	var p: Vector2i = Vector2i(from_col, from_line)
+	var stack: int = 0
+	
+	var text: String = get_line_text(p.y)
+	while p.y >= 0 and p.y < line_count:
+		while p.x >= 0 and p.x < text.length():
+			var char: String = text[p.x]
+			
+			if char == counterpart:
+				if stack == 0:
+					return p
+				stack -= 1
+			elif char == brace:
+				stack += 1
+			p.x += d
+		
+		if force_inline:
+			return Vector2i(-1, -1)
+		
+		p.y += d
+		text = get_line_text(p.y)
+		p.x = (text.length() - 1) * int(!forward) # 0 if forwards, EOL if backwards
+	
+	# i want optional typing to be in godot so bad rn
+	return Vector2i(-1, -1)
 
 
 func get_comment_char() -> String:
@@ -370,6 +448,17 @@ func cmd_move_by_chars(args: Dictionary) -> Vector2i:
 func cmd_move_by_lines(args: Dictionary) -> Vector2i:
 	return Vector2i(get_column(), get_line() + args.get("move_by", 0))
 
+## Moves the cursor vertically by a certain percentage of the screen / page
+## Args:
+## - "percentage": float
+##		How much to move by
+##		E.g. percentage = 0.5 will move down half a screen, 
+##		percentage = -1.0 will move up a full screen
+func cmd_move_by_screen(args: Dictionary) -> Vector2i:
+	var h: int = code_edit.get_visible_line_count()
+	var amt: int = int( h * args.get("percentage", 0.0) )
+	return Vector2i(get_column(), get_line() + amt)
+
 ## Moves the cursor by word
 ## Args:
 ## - "forward": bool
@@ -521,6 +610,70 @@ func cmd_move_by_section(args: Dictionary) -> Vector2i:
 #region TEXT OBJECTS
 # Text Object commands must return two Vector2is with the cursor start and end position
 
+## Get the bounds of the text object specified in args
+## Args:
+## - "object": String
+##		The text object to select. Should ideally be a key in constants.gd::BRACES but doesn't have to
+##		If "object" is not in constants.gd::BRACES, then "counterpart" must be specified
+## - "counterpart": String (optional)
+##		The end key of the text object
+## - "force_inline": bool (default = false)
+##		Forces the search to occur only in the current line
+func cmd_text_object(args: Dictionary) -> Array[Vector2i]:
+	var p: Vector2i = get_caret_pos()
+	
+	# Get start and end keys
+	if !args.has("object"):
+		push_error("[GodotVim] Error on cmd_text_object: No object selected")
+		return [ p, p ]
+	
+	
+	var obj: String = args.object
+	var counterpart: String
+	if args.has("counterpart"):
+		counterpart = args.counterpart
+	elif BRACES.has(obj):
+		counterpart = BRACES[obj]
+	else:
+		push_error("[GodotVim] Error on cmd_text_object: Invalid brace pair. You can specify an end key with the argument `counterpart: String`")
+		return [ p, p ]
+	
+	var do_force_inline: bool = args.get("force_inline", Constants.INLINE_BRACES.has(obj))
+	
+	# Look backwards to find start
+	var p0: Vector2i = find_brace(
+		p.y,
+		# Deal with edge case where the cursor is already on the end
+		p.x - 1 if get_line_text(p.y)[p.x] == counterpart else p.x,
+		obj,
+		counterpart,
+		false,
+		do_force_inline,
+	)
+	
+	# Not found; try to look forward then
+	if p0.x == -1:
+		if do_force_inline:
+			var col: int = find_char_in_line(p.y, p.x, true, false, obj)
+			p0 = Vector2i(col, p.y)
+		else:
+			p0 = find_next_occurence_of_char(p.y, p.x, obj, true)
+		
+		if p0.x == -1:
+			return [ p, p ]
+	
+	# Look forwards to find end
+	var p1: Vector2i = find_brace(p0.y, p0.x + 1, obj, counterpart, true, do_force_inline)
+	
+	if p1 == Vector2i(-1, -1):
+		return [ p, p ]
+	
+	return [
+		p0 + Vector2i.RIGHT,
+		p1 + Vector2i.LEFT,
+	]
+
+
 ## TODO "aw" word object ("inner" = false). See `var key_map` in KeyMap
 func cmd_text_object_word(args: Dictionary) -> Array[Vector2i]:
 	if !args.get("inner", false):
@@ -556,6 +709,7 @@ func cmd_text_object_paragraph(args: Dictionary) -> Array[Vector2i]:
 # TODO
 func cmd_text_object_function(args: Dictionary) -> Array[Vector2i]:
 	return []
+
 
 #endregion TEXT OBJECTS
 

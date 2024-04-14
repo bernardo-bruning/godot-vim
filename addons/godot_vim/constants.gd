@@ -11,6 +11,18 @@ enum Language {
 	SHADER,
 }
 
-const KEYWORDS: String = ".,\"'-=+!@#$%^&*()[]{}?~/\\<>:;"
+const KEYWORDS: String = ".,\"'-=+!@#$%^&*()[]{}?~/\\<>:;`"
 const DIGITS: String = "0123456789"
 const SPACES: String = " \t"
+const BRACES: Dictionary = {
+	'"': '"',
+	"'": "'",
+	"`": "`",
+	"(": ")",
+	"[": "]",
+	"{": "}",
+}
+## Braces we want to keep inline
+## See cursor.gd::cmd_text_object()
+const INLINE_BRACES: Array[String] = [ '"', "'", "`", ]
+
