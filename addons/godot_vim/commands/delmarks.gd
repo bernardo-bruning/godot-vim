@@ -1,6 +1,6 @@
-const Contants = preload("res://addons/godot_vim/constants.gd")
+const Constants = preload("res://addons/godot_vim/constants.gd")
 const StatusBar = preload("res://addons/godot_vim/status_bar.gd")
-const Mode = Contants.Mode
+const Mode = Constants.Mode
 
 const LINE_START_IDX: int = 8
 const COL_START_IDX: int = 16
