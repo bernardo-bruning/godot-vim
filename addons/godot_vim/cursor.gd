@@ -6,8 +6,10 @@ const Constants = preload("res://addons/godot_vim/constants.gd")
 const Mode = Constants.Mode
 const KEYWORDS = Constants.KEYWORDS
 const SPACES = Constants.SPACES
+const LANGUAGE = Constants.Language
 
 var code_edit: CodeEdit
+var language: LANGUAGE = LANGUAGE.GDSCRIPT
 var command_line: CommandLine
 var status_bar: StatusBar
 var key_map: KeyMap
@@ -158,6 +160,16 @@ func find_char_in_line(line: int, from_col: int, forward: bool, stop_before: boo
 	return col + (int(!forward) - int(forward)) * int(stop_before)
 
 
+# TODO maybe cache if it's going to be an issue
+func get_comment_char() -> String:
+	match language:
+		LANGUAGE.SHADER:
+			return "//"
+		LANGUAGE.GDSCRIPT:
+			return "#"
+		_:
+			return "#"
+
 func set_line_commented(line: int, is_commented: bool):
 	var text: String = get_line_text(line)
 	# Don't comment if empty
@@ -166,7 +178,7 @@ func set_line_commented(line: int, is_commented: bool):
 	
 	var ind: int = code_edit.get_first_non_whitespace_column(line)
 	if is_commented:
-		code_edit.set_line(line, text.insert(ind, '# '))
+		code_edit.set_line(line, text.insert(ind, get_comment_char() + " " ))
 		return
 	# We use get_word_edge_pos() in case there's multiple '#'s
 	var start_col: int = get_word_edge_pos(line, ind, true, false, true).x
@@ -174,9 +186,8 @@ func set_line_commented(line: int, is_commented: bool):
 	code_edit.delete_selection()
 
 func is_line_commented(line: int) -> bool:
-	var ind: int = code_edit.get_first_non_whitespace_column(line)
-	var text: String = get_line_text(line)
-	return text[ind] == '#'
+	var text: String = get_line_text(line).strip_edges(true, false)
+	return text.begins_with( get_comment_char() )
 
 
 func set_mode(m: int):
@@ -300,9 +311,17 @@ func is_uppercase(text: String) -> bool:
 
 func is_line_section(text: String) -> bool:
 	var t: String = text.strip_edges()
-	return text.begins_with("func")\
-		or text.begins_with("class")\
-		or text.begins_with("#region")
+	
+	match language:
+		LANGUAGE.SHADER:
+			return t.ends_with("{") and !SPACES.contains(text.left(1))
+		LANGUAGE.GDSCRIPT:
+			return t.begins_with("func")\
+				or t.begins_with("class")\
+				or t.begins_with("#region")
+		_:
+			return false
+
 
 func get_stream_char(stream: String, idx: int) -> String:
 	return stream[idx] if stream.length() > idx else ''
