@@ -14,7 +14,7 @@ enum Language {
 const KEYWORDS: String = ".,\"'-=+!@#$%^&*()[]{}?~/\\<>:;`"
 const DIGITS: String = "0123456789"
 const SPACES: String = " \t"
-const BRACES: Dictionary = {
+const PAIRS: Dictionary = {
 	'"': '"',
 	"'": "'",
 	"`": "`",
@@ -22,4 +22,5 @@ const BRACES: Dictionary = {
 	"[": "]",
 	"{": "}",
 }
+const BRACES: String = "([{}])"
 

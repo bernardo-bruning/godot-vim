@@ -129,22 +129,26 @@ var key_map: Array[Dictionary] = [
 	{ "keys": ["g", "m"], "type": Motion, "motion": { "type": "move_to_center_of_line" } },
 	{ "keys": ["<C-u>"], "type": Motion, "motion": { "type": "move_by_screen", "percentage": -0.5, "line_wise": true } },
 	{ "keys": ["<C-d>"], "type": Motion, "motion": { "type": "move_by_screen", "percentage": 0.5, "line_wise": true } },
+	{ "keys": ["%"], "type": Motion, "motion": { "type": "jump_to_next_brace_pair" } }, # TODO
 	
 	# TEXT OBJECTS
 	{ "keys": ["a", "w"], "type": Motion, "motion": { "type": "text_object_word", "inner": false, "inclusive": false } }, # TODO
 	{ "keys": ["a", "W"], "type": Motion, "motion": { "type": "text_object_word", "inner": false, "inclusive": false } }, # TODO
 	{ "keys": ["i", "w"], "type": Motion, "motion": { "type": "text_object_word", "inner": true, "inclusive": true } },
 	{ "keys": ["i", "W"], "type": Motion, "motion": { "type": "text_object_word", "inner": true, "big_word": true, "inclusive": true } },
-	{ "keys": ["a", "p"], "type": Motion, "motion": { "type": "text_object_paragraph", "inner": false, "line_wise": true } }, # TODO
 	{ "keys": ["i", "p"], "type": Motion, "motion": { "type": "text_object_paragraph", "inner": true, "line_wise": true } },
+	{ "keys": ["a", "p"], "type": Motion, "motion": { "type": "text_object_paragraph", "inner": false, "line_wise": true } }, # TODO
 	
 	{ "keys": ["i", "\""], "type": Motion, "motion": { "type": "text_object", "object": "\"", "inner": true, "inclusive": true, "inline": true } },
 	{ "keys": ["i", "'"], "type": Motion, "motion": { "type": "text_object", "object": "'", "inner": true, "inclusive": true, "inline": true } },
 	{ "keys": ["i", "`"], "type": Motion, "motion": { "type": "text_object", "object": "`", "inner": true, "inclusive": true, "inline": true } },
 	{ "keys": ["i", "("], "type": Motion, "motion": { "type": "text_object", "object": "(", "inner": true, "inclusive": true } },
+	{ "keys": ["i", ")"], "type": Motion, "motion": { "type": "text_object", "object": "(", "inner": true, "inclusive": true } },
 	{ "keys": ["i", "b"], "type": Motion, "motion": { "type": "text_object", "object": "(", "inner": true, "inclusive": true } },
 	{ "keys": ["i", "["], "type": Motion, "motion": { "type": "text_object", "object": "[", "inner": true, "inclusive": true } },
+	{ "keys": ["i", "]"], "type": Motion, "motion": { "type": "text_object", "object": "[", "inner": true, "inclusive": true } },
 	{ "keys": ["i", "{"], "type": Motion, "motion": { "type": "text_object", "object": "{", "inner": true, "inclusive": true } },
+	{ "keys": ["i", "}"], "type": Motion, "motion": { "type": "text_object", "object": "{", "inner": true, "inclusive": true } },
 	{ "keys": ["i", "B"], "type": Motion, "motion": { "type": "text_object", "object": "{", "inner": true, "inclusive": true } },
 	
 	# OPERATORS

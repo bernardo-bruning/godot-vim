@@ -7,7 +7,6 @@ const Mode = Constants.Mode
 const KEYWORDS = Constants.KEYWORDS
 const SPACES = Constants.SPACES
 const LANGUAGE = Constants.Language
-const BRACES = Constants.BRACES
 
 var code_edit: CodeEdit
 var language: LANGUAGE = LANGUAGE.GDSCRIPT
@@ -168,11 +167,12 @@ func find_char_in_line(line: int, from_col: int, forward: bool, stop_before: boo
 	return col + (int(!forward) - int(forward)) * int(stop_before)
 
 
-## Finds the next -- or previous if `forward = false` -- occurence of [param char]
-func find_next_occurence_of_char(
+## Finds the next -- or previous if `forward = false` -- occurence of any character in `chars`
+## if `chars` has only one character, it will look for that one
+func find_next_occurence_of_chars(
 	from_line: int,
 	from_col: int,
-	char: String,
+	chars: String,
 	forward: bool,
 ) -> Vector2i:
 	var p: Vector2i = Vector2i(from_col, from_line)
@@ -182,7 +182,7 @@ func find_next_occurence_of_char(
 	var text: String = get_line_text(p.y)
 	while p.y >= 0 and p.y < line_count:
 		while p.x >= 0 and p.x < text.length():
-			if text[p.x] == char:
+			if chars.contains(text[p.x]):
 				return p
 			p.x += search_dir
 		p.y += search_dir
@@ -196,7 +196,7 @@ func find_next_occurence_of_char(
 ## Finds the next / previous brace specified by `brace` and its closing `counterpart`
 ## `force_inline` forces to look only in the line `from_line` (See constants.gd::INLINE_BRACKETS)
 ## E.g.
-##  brace = "(", counterpart = ")", forward = false, from_line and from_col = cursor pos
+##  brace = "(", counterpart = ")", forward = false, from_line and from_col = in between the brackets
 ##  will find the start of the set of parantheses the cursor is inside of
 func find_brace(
 	from_line: int,
@@ -206,16 +206,10 @@ func find_brace(
 	forward: bool,
 	force_inline: bool = false,
 ) -> Vector2i:
-	# Flip if going backwards
-	if !forward:
-		var b: String = brace
-		brace = counterpart
-		counterpart = b
-	
 	var line_count: int = code_edit.get_line_count()
 	var d: int = int(forward) - int(!forward)
 	
-	var p: Vector2i = Vector2i(from_col, from_line)
+	var p: Vector2i = Vector2i(from_col + d, from_line)
 	var stack: int = 0
 	
 	var text: String = get_line_text(p.y)
@@ -607,14 +601,49 @@ func cmd_move_by_section(args: Dictionary) -> Vector2i:
 	return section_edge
 
 
+## Corresponds to the % motion in VIM
+func cmd_jump_to_next_brace_pair(_args: Dictionary) -> Vector2i:
+	const PAIRS = Constants.PAIRS
+	var p: Vector2i = get_caret_pos()
+	
+	var p0: Vector2i = find_next_occurence_of_chars(p.y, p.x, Constants.BRACES, true)
+	# Not found
+	if p0.x < 0 or p0.y < 0:
+		return p
+	
+	var brace: String = code_edit.get_line(p0.y)[p0.x]
+	# Whether this brace is an opening or closing brace. i.e. ([{ or }])
+	var is_closing_brace: bool = PAIRS.values().has(brace)
+	var closing_counterpart: String = ""
+	if is_closing_brace:
+		var idx: int = PAIRS.values().find(brace)
+		if idx != -1:
+			closing_counterpart = brace
+			brace = PAIRS.keys()[idx]
+	else:
+		closing_counterpart = PAIRS.get(brace, "")
+	if closing_counterpart.is_empty():
+		push_error("[GodotVIM] Failed to get counterpart for brace: ", brace)
+		return p
+	
+	var p1: Vector2i = find_brace(p0.y, p0.x, closing_counterpart, brace, false)\
+		if is_closing_brace\
+		else find_brace(p0.y, p0.x, brace, closing_counterpart, true)
+	
+	if p1 == Vector2i(-1, -1):
+		return p0
+	
+	return p1
+
+
 #region TEXT OBJECTS
 # Text Object commands must return two Vector2is with the cursor start and end position
 
 ## Get the bounds of the text object specified in args
 ## Args:
 ## - "object": String
-##		The text object to select. Should ideally be a key in constants.gd::BRACES but doesn't have to
-##		If "object" is not in constants.gd::BRACES, then "counterpart" must be specified
+##		The text object to select. Should ideally be a key in constants.gd::PAIRS but doesn't have to
+##		If "object" is not in constants.gd::PAIRS, then "counterpart" must be specified
 ## - "counterpart": String (optional)
 ##		The end key of the text object
 ## - "inline": bool (default = false)
@@ -627,27 +656,26 @@ func cmd_text_object(args: Dictionary) -> Array[Vector2i]:
 		push_error("[GodotVim] Error on cmd_text_object: No object selected")
 		return [ p, p ]
 	
-	
 	var obj: String = args.object
 	var counterpart: String
 	if args.has("counterpart"):
 		counterpart = args.counterpart
-	elif BRACES.has(obj):
-		counterpart = BRACES[obj]
+	elif Constants.PAIRS.has(obj):
+		counterpart = Constants.PAIRS[obj]
 	else:
 		push_error("[GodotVim] Error on cmd_text_object: Invalid brace pair: \"", obj, "\". You can specify an end key with the argument `counterpart: String`")
 		return [ p, p ]
 	
 	var inline: bool = args.get("inline", false)
 	
-	# Look backwards to find start
+	# Deal with edge case where the cursor is already on the end
 	var p0x = p.x - 1 if get_line_text(p.y)[p.x] == counterpart else p.x
+	# Look backwards to find start
 	var p0: Vector2i = find_brace(
 		p.y,
-		# Deal with edge case where the cursor is already on the end
 		p0x,
-		obj,
 		counterpart,
+		obj,
 		false,
 		inline,
 	)
@@ -658,13 +686,13 @@ func cmd_text_object(args: Dictionary) -> Array[Vector2i]:
 			var col: int = find_char_in_line(p.y, p0x, true, false, obj)
 			p0 = Vector2i(col, p.y)
 		else:
-			p0 = find_next_occurence_of_char(p.y, p0x, obj, true)
+			p0 = find_next_occurence_of_chars(p.y, p0x, obj, true)
 		
 		if p0.x == -1:
 			return [ p, p ]
 	
 	# Look forwards to find end
-	var p1: Vector2i = find_brace(p0.y, p0.x + 1, obj, counterpart, true, inline)
+	var p1: Vector2i = find_brace(p0.y, p0.x, obj, counterpart, true, inline)
 	
 	if p1 == Vector2i(-1, -1):
 		return [ p, p ]
@@ -707,9 +735,6 @@ func cmd_text_object_paragraph(args: Dictionary) -> Array[Vector2i]:
 	]
 
 
-# TODO
-func cmd_text_object_function(args: Dictionary) -> Array[Vector2i]:
-	return []
 
 
 #endregion TEXT OBJECTS
