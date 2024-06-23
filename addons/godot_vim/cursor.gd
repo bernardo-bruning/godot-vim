@@ -289,7 +289,7 @@ func set_mode(m: int):
 			
 			# Insert -> Normal
 			if old_mode == Mode.INSERT:
-				code_edit.end_complex_operation() # See Mode.INSERT match arm below
+				# code_edit.end_complex_operation() # See Mode.INSERT match arm below
 				move_column(-1)
 		
 		Mode.VISUAL:
@@ -313,10 +313,10 @@ func set_mode(m: int):
 			code_edit.call_deferred("grab_focus")
 			status_bar.set_mode_text(Mode.INSERT)
 			
-			if old_mode == Mode.NORMAL:
+			# if old_mode == Mode.NORMAL:
 				# Complex operation so that entire insert mode actions can be undone
 				# with one undo
-				code_edit.begin_complex_operation()
+				# code_edit.begin_complex_operation()
 		
 		_:
 			push_error("[vim::cursor::set_mode()] Unknown mode %s" % mode)
@@ -617,7 +617,7 @@ func cmd_move_by_section(args: Dictionary) -> Vector2i:
 ##		If "object" is not in constants.gd::BRACES, then "counterpart" must be specified
 ## - "counterpart": String (optional)
 ##		The end key of the text object
-## - "force_inline": bool (default = false)
+## - "inline": bool (default = false)
 ##		Forces the search to occur only in the current line
 func cmd_text_object(args: Dictionary) -> Array[Vector2i]:
 	var p: Vector2i = get_caret_pos()
@@ -635,35 +635,36 @@ func cmd_text_object(args: Dictionary) -> Array[Vector2i]:
 	elif BRACES.has(obj):
 		counterpart = BRACES[obj]
 	else:
-		push_error("[GodotVim] Error on cmd_text_object: Invalid brace pair. You can specify an end key with the argument `counterpart: String`")
+		push_error("[GodotVim] Error on cmd_text_object: Invalid brace pair: \"", obj, "\". You can specify an end key with the argument `counterpart: String`")
 		return [ p, p ]
 	
-	var do_force_inline: bool = args.get("force_inline", Constants.INLINE_BRACES.has(obj))
+	var inline: bool = args.get("inline", false)
 	
 	# Look backwards to find start
+	var p0x = p.x - 1 if get_line_text(p.y)[p.x] == counterpart else p.x
 	var p0: Vector2i = find_brace(
 		p.y,
 		# Deal with edge case where the cursor is already on the end
-		p.x - 1 if get_line_text(p.y)[p.x] == counterpart else p.x,
+		p0x,
 		obj,
 		counterpart,
 		false,
-		do_force_inline,
+		inline,
 	)
 	
 	# Not found; try to look forward then
 	if p0.x == -1:
-		if do_force_inline:
-			var col: int = find_char_in_line(p.y, p.x, true, false, obj)
+		if inline:
+			var col: int = find_char_in_line(p.y, p0x, true, false, obj)
 			p0 = Vector2i(col, p.y)
 		else:
-			p0 = find_next_occurence_of_char(p.y, p.x, obj, true)
+			p0 = find_next_occurence_of_char(p.y, p0x, obj, true)
 		
 		if p0.x == -1:
 			return [ p, p ]
 	
 	# Look forwards to find end
-	var p1: Vector2i = find_brace(p0.y, p0.x + 1, obj, counterpart, true, do_force_inline)
+	var p1: Vector2i = find_brace(p0.y, p0.x + 1, obj, counterpart, true, inline)
 	
 	if p1 == Vector2i(-1, -1):
 		return [ p, p ]

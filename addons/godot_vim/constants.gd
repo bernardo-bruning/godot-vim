@@ -22,7 +22,4 @@ const BRACES: Dictionary = {
 	"[": "]",
 	"{": "}",
 }
-## Braces we want to keep inline
-## See cursor.gd::cmd_text_object()
-const INLINE_BRACES: Array[String] = [ '"', "'", "`", ]
 

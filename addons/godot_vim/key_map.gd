@@ -138,9 +138,9 @@ var key_map: Array[Dictionary] = [
 	{ "keys": ["a", "p"], "type": Motion, "motion": { "type": "text_object_paragraph", "inner": false, "line_wise": true } }, # TODO
 	{ "keys": ["i", "p"], "type": Motion, "motion": { "type": "text_object_paragraph", "inner": true, "line_wise": true } },
 	
-	{ "keys": ["i", "\""], "type": Motion, "motion": { "type": "text_object", "object": "\"", "inner": true, "inclusive": true } },
-	{ "keys": ["i", "'"], "type": Motion, "motion": { "type": "text_object", "object": "'", "inner": true, "inclusive": true } },
-	{ "keys": ["i", "`"], "type": Motion, "motion": { "type": "text_object", "object": "`", "inner": true, "inclusive": true } },
+	{ "keys": ["i", "\""], "type": Motion, "motion": { "type": "text_object", "object": "\"", "inner": true, "inclusive": true, "inline": true } },
+	{ "keys": ["i", "'"], "type": Motion, "motion": { "type": "text_object", "object": "'", "inner": true, "inclusive": true, "inline": true } },
+	{ "keys": ["i", "`"], "type": Motion, "motion": { "type": "text_object", "object": "`", "inner": true, "inclusive": true, "inline": true } },
 	{ "keys": ["i", "("], "type": Motion, "motion": { "type": "text_object", "object": "(", "inner": true, "inclusive": true } },
 	{ "keys": ["i", "b"], "type": Motion, "motion": { "type": "text_object", "object": "(", "inner": true, "inclusive": true } },
 	{ "keys": ["i", "["], "type": Motion, "motion": { "type": "text_object", "object": "[", "inner": true, "inclusive": true } },
