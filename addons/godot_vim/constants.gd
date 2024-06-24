@@ -11,6 +11,16 @@ enum Language {
 	SHADER,
 }
 
-const KEYWORDS: String = ".,\"'-=+!@#$%^&*()[]{}?~/\\<>:;"
+const KEYWORDS: String = ".,\"'-=+!@#$%^&*()[]{}?~/\\<>:;`"
 const DIGITS: String = "0123456789"
 const SPACES: String = " \t"
+const PAIRS: Dictionary = {
+	'"': '"',
+	"'": "'",
+	"`": "`",
+	"(": ")",
+	"[": "]",
+	"{": "}",
+}
+const BRACES: String = "([{}])"
+

@@ -46,7 +46,11 @@ func _on_text_changed(cmd: String):
 	if code_edit.get_caret_count() < 2:
 		code_edit.add_caret(pos.y, pos.x)
 	code_edit.select(pos.y, pos.x, pos.y, pos.x + rmatch.get_string().length(), 1)
-	code_edit.scroll_vertical = code_edit.get_scroll_pos_for_line(pos.y)
+	# code_edit.center_viewport_to_caret(1) # why no work, eh?
+	
+	code_edit.scroll_vertical = code_edit.get_scroll_pos_for_line(pos.y)\
+		# Offset to center
+		- code_edit.get_visible_line_count() / 2
 
 func handle_command(cmd: String):
 	if cmd.begins_with('/'):

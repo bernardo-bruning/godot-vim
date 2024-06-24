@@ -85,6 +85,8 @@ enum {
 
 
 
+#region key_map
+
 # Also see the "COMMANDS" section at the bottom of cursor.gd
 #  Command for     { "type": "foo", ... }   is handled in Cursor::cmd_foo(args: Dictionary)
 #  where `args` is ^^^^^ this Dict ^^^^^^
@@ -105,12 +107,15 @@ var key_map: Array[Dictionary] = [
 	{ "keys": ["B"], "type": Motion, "motion": { "type": "move_by_word", "forward": false, "word_end": false, "big_word": true } },
 	{ "keys": ["g", "E"], "type": Motion, "motion": { "type": "move_by_word", "forward": false, "word_end": true, "big_word": true } },
 	
+	# Find & search
 	{ "keys": ["f", "{char}"], "type": Motion, "motion": { "type": "find_in_line", "forward": true, "inclusive": true } },
 	{ "keys": ["t", "{char}"], "type": Motion, "motion": { "type": "find_in_line", "forward": true, "stop_before": true, "inclusive": true } },
 	{ "keys": ["F", "{char}"], "type": Motion, "motion": { "type": "find_in_line", "forward": false } },
 	{ "keys": ["T", "{char}"], "type": Motion, "motion": { "type": "find_in_line", "forward": false, "stop_before": true } },
 	{ "keys": [";"], "type": Motion, "motion": { "type": "find_in_line_again", "invert": false } },
 	{ "keys": [","], "type": Motion, "motion": { "type": "find_in_line_again", "invert": true } },
+	{ "keys": ["n"], "type": Motion, "motion": { "type": "find_again", "forward": true } },
+	{ "keys": ["N"], "type": Motion, "motion": { "type": "find_again", "forward": false } },
 	
 	{ "keys": ["0"], "type": Motion, "motion": { "type": "move_to_bol" } },
 	{ "keys": ["$"], "type": Motion, "motion": { "type": "move_to_eol" } },
@@ -122,8 +127,31 @@ var key_map: Array[Dictionary] = [
 	{ "keys": ["g", "g"], "type": Motion, "motion": { "type": "move_to_bof", "line_wise": true } },
 	{ "keys": ["G"], "type": Motion, "motion": { "type": "move_to_eof", "line_wise": true } },
 	{ "keys": ["g", "m"], "type": Motion, "motion": { "type": "move_to_center_of_line" } },
-	{ "keys": ["n"], "type": Motion, "motion": { "type": "find_again", "forward": true } },
-	{ "keys": ["N"], "type": Motion, "motion": { "type": "find_again", "forward": false } },
+	{ "keys": ["<C-u>"], "type": Motion, "motion": { "type": "move_by_screen", "percentage": -0.5, "line_wise": true } },
+	{ "keys": ["<C-d>"], "type": Motion, "motion": { "type": "move_by_screen", "percentage": 0.5, "line_wise": true } },
+	{ "keys": ["%"], "type": Motion, "motion": { "type": "jump_to_next_brace_pair" } },
+	
+	# TEXT OBJECTS
+	{ "keys": ["a", "w"], "type": Motion, "motion": { "type": "text_object_word", "around": true, "inclusive": true } },
+	{ "keys": ["a", "W"], "type": Motion, "motion": { "type": "text_object_word", "around": true, "inclusive": true } },
+	{ "keys": ["i", "w"], "type": Motion, "motion": { "type": "text_object_word", "inclusive": true } },
+	{ "keys": ["i", "W"], "type": Motion, "motion": { "type": "text_object_word", "big_word": true, "inclusive": true } },
+	{ "keys": ["i", "p"], "type": Motion, "motion": { "type": "text_object_paragraph", "line_wise": true } },
+	{ "keys": ["a", "p"], "type": Motion, "motion": { "type": "text_object_paragraph", "around": true, "line_wise": true } },
+	
+	{ "keys": ["i", "\""], "type": Motion, "motion": { "type": "text_object", "object": "\"", "inclusive": true, "inline": true } },
+	{ "keys": ["a", "\""], "type": Motion, "motion": { "type": "text_object", "object": "\"", "around": true, "inclusive": true, "inline": true } },
+	{ "keys": ["i", "'"], "type": Motion, "motion": { "type": "text_object", "object": "'", "inclusive": true, "inline": true } },
+	{ "keys": ["a", "'"], "type": Motion, "motion": { "type": "text_object", "object": "'", "around": true, "inclusive": true, "inline": true } },
+	{ "keys": ["i", "`"], "type": Motion, "motion": { "type": "text_object", "object": "`", "inclusive": true, "inline": true } },
+	{ "keys": ["a", "`"], "type": Motion, "motion": { "type": "text_object", "object": "`", "around": true, "inclusive": true, "inline": true } },
+	# "i" + any of "(", ")", or "b"
+	{ "keys": ["i", ["(", ")", "b"]], "type": Motion, "motion": { "type": "text_object", "object": "(", "inclusive": true } },
+	{ "keys": ["a", ["(", ")", "b"]], "type": Motion, "motion": { "type": "text_object", "object": "(", "around": true, "inclusive": true } },
+	{ "keys": ["i", ["[", "]"]], "type": Motion, "motion": { "type": "text_object", "object": "[", "inclusive": true } },
+	{ "keys": ["a", ["[", "]"]], "type": Motion, "motion": { "type": "text_object", "object": "[", "around": true, "inclusive": true } },
+	{ "keys": ["i", ["{", "}", "B"]], "type": Motion, "motion": { "type": "text_object", "object": "{", "inclusive": true } },
+	{ "keys": ["a", ["{", "}", "B"]], "type": Motion, "motion": { "type": "text_object", "object": "{", "around": true, "inclusive": true } },
 	
 	# OPERATORS
 	{ "keys": ["d"], "type": Operator, "operator": { "type": "delete" } },
@@ -158,6 +186,7 @@ var key_map: Array[Dictionary] = [
 		"motion": { "type": "move_by_chars", "move_by": 1 }
 	},
 	{ "keys": ["p"], "type": Operator, "context": Mode.VISUAL, "operator": { "type": "paste" } },
+	{ "keys": ["p"], "type": Operator, "context": Mode.VISUAL_LINE, "operator": { "type": "paste" } },
 	
 	{ "keys": [">"], "type": Operator, "operator": { "type": "indent", "forward": true } },
 	{ "keys": ["<"], "type": Operator, "operator": { "type": "indent", "forward": false } },
@@ -174,6 +203,8 @@ var key_map: Array[Dictionary] = [
 	{ "keys": ["~"], "type": Operator, "context": Mode.VISUAL, "operator": { "type": "toggle_uppercase" } },
 	{ "keys": ["u"], "type": Operator, "context": Mode.VISUAL, "operator": { "type": "set_uppercase", "uppercase": false } },
 	{ "keys": ["U"], "type": Operator, "context": Mode.VISUAL, "operator": { "type": "set_uppercase", "uppercase": true } },
+	{ "keys": ["V"], "type": Operator, "context": Mode.VISUAL, "operator": { "type": "visual", "line_wise": true } },
+	{ "keys": ["v"], "type": Operator, "context": Mode.VISUAL_LINE, "operator": { "type": "visual", "line_wise": false } },
 	
 	# ACTIONS
 	{ "keys": ["i"], "type": Action, "action": { "type": "insert" } },
@@ -193,12 +224,19 @@ var key_map: Array[Dictionary] = [
 	{ "keys": ["z", "z"], "type": Action, "action": { "type": "center_caret" } },
 	{ "keys": ["m", "{char}"], "type": Action, "action": { "type": "mark" } },
 	{ "keys": ["`", "{char}"], "type": Action, "action": { "type": "jump_to_mark" } },
+	
+	# MISCELLANEOUS
+	{ "keys": ["o"], "type": Operator, "context": Mode.VISUAL, "operator": { "type": "visual_jump_to_other_end" } },
+	{ "keys": ["o"], "type": Operator, "context": Mode.VISUAL_LINE, "operator": { "type": "visual_jump_to_other_end" } },
 ]
+
+#endregion key_map
+
 
 # Keys we won't handle
 const BLACKLIST: Array[String] = [
 	"<C-s>", # Save
-	"<C-b>", # Bookmark (marks arent' implemented yet)
+	"<C-b>", # Bookmark
 ]
 
 enum KeyMatch {
@@ -244,11 +282,13 @@ func register_event(event: InputEventKey, with_context: Mode) -> Dictionary:
 
 
 func parse_keys(keys: Array[String], with_context: Mode) -> Dictionary:
-	var cmd: Dictionary = find_cmd(keys, with_context)
+	var blacklist: Array = get_blacklist_types_in_context(with_context)
+	var cmd: Dictionary = find_cmd(keys, with_context, blacklist)
 	if cmd.is_empty() or cmd.type == NotFound:
 		call_deferred(&"clear")
 		return cmd
 	if cmd.type == Incomplete:
+		# print(cmd)
 		return cmd
 	
 	# Execute the operation as-is if in VISUAL mode
@@ -258,7 +298,8 @@ func parse_keys(keys: Array[String], with_context: Mode) -> Dictionary:
 		if op_args.is_empty(): # Incomplete; await further input
 			return { 'type': Incomplete }
 		
-		var next: Dictionary = find_cmd(op_args, with_context)
+		var next: Dictionary = find_cmd(op_args, with_context, [ Action, OperatorMotion ])
+		
 		if next.is_empty() or next.type == NotFound: # Invalid sequence
 			call_deferred(&"clear")
 			return { 'type': NotFound }
@@ -270,9 +311,9 @@ func parse_keys(keys: Array[String], with_context: Mode) -> Dictionary:
 	call_deferred(&"clear")
 	return cmd
 
-
 ## The returned cmd will always have a 'type' key
-func find_cmd(keys: Array[String], with_context: Mode) -> Dictionary:
+# TODO use bitmask instead of Array?
+func find_cmd(keys: Array[String], with_context: Mode, blacklist: Array = []) -> Dictionary:
 	var partial: bool = false # In case none were found
 	var is_visual: bool = with_context == Mode.VISUAL or with_context == Mode.VISUAL_LINE
 	
@@ -282,35 +323,38 @@ func find_cmd(keys: Array[String], with_context: Mode) -> Dictionary:
 		if with_context == Mode.INSERT and cmd.get("context", -1) != Mode.INSERT:
 			continue
 		
-		# OperatorMotions in visual mode aren't allowed
-		if cmd.type == OperatorMotion and is_visual:
+		if blacklist.has(cmd.type):
 			continue
 		
-		# Don't allow Actions in Visual mode unless specified
-		if cmd.type == Action and is_visual\
-			and !(cmd.has("context") and cursor.is_mode_visual(cmd.context)):
+		# Skip if contexts don't match
+		if cmd.has("context") and with_context != cmd.context:
 			continue
-		
-		# Allow Operators to be executed as-is (without additional motion) in visual mode
-		if !(cmd.type == Operator and is_visual):
-			# Check context for other commands
-			if cmd.has("context") and with_context != cmd.context:
-				continue
 		
 		# CHECK KEYS
 		var m: KeyMatch = match_keys(cmd.keys, keys)
 		partial = partial or m == KeyMatch.Partial # Set/keep partial = true if it was a partial match
+		
 		if m != KeyMatch.Full:
 			continue
 		
 		var cmd_mut: Dictionary = cmd.duplicate(true) # 'mut' ('mutable') because key_map is read-only
 		# Keep track of selected character, which will later be copied into the fucntion call for the command
 		# (See execute() where we check if cmd.has('selected_char'))
-		if cmd.keys[-1] == '{char}':
+		if cmd.keys[-1] is String and cmd.keys[-1] == '{char}':
 			cmd_mut.selected_char = keys.back()
 		return cmd_mut
 	
 	return { "type": Incomplete if partial else NotFound }
+
+
+# TODO use bitmask instead of Array?
+func get_blacklist_types_in_context(context: Mode) -> Array:
+	match context:
+		Mode.VISUAL, Mode.VISUAL_LINE:
+			return [ OperatorMotion, Action ]
+		_:
+			return []
+
 
 func execute_operator_motion(cmd: Dictionary):
 	if cmd.has('motion'):
@@ -347,8 +391,14 @@ func execute_action(cmd: Dictionary):
 func execute_motion(cmd: Dictionary):
 	if cmd.has('selected_char'):
 		cmd.motion.selected_char = cmd.selected_char
-	var pos: Vector2i = call_cmd(cmd.motion)
-	cursor.set_caret_pos(pos.y, pos.x)
+	var pos = call_cmd(cmd.motion) # Vector2i for normal motion, or [Vector2i, Vector2i] for text object
+	
+	if pos is Vector2i:
+		cursor.set_caret_pos(pos.y, pos.x)
+	elif pos is Array:
+		assert(pos.size() == 2)
+		# print("[execute_motion() -> text obj] pos = ", pos)
+		cursor.select(pos[0].y, pos[0].x, pos[1].y, pos[1].x)
 
 func execute(cmd: Dictionary):
 	if !is_cmd_valid(cmd):
@@ -371,11 +421,17 @@ func operator_motion(operator: Dictionary, motion: Dictionary):
 	# print("[KeyMay::execute_operator_motion()] op = ", operator, ", motion = ", motion) # DEBUG
 
 	# Execute motion before operation
-	var p0: Vector2i = cursor.get_caret_pos()
-	var p1: Vector2i = call_cmd(motion)
-	if motion.get('inclusive', false):
-		p1.x += 1
-	cursor.code_edit.select(p0.y, p0.x, p1.y, p1.x)
+	var p = call_cmd(motion) # Vector2i for normal motion, or [Vector2i, Vector2i] for text object
+	if p is Vector2i:
+		var p0: Vector2i = cursor.get_caret_pos()
+		if motion.get('inclusive', false):
+			p.x += 1
+		cursor.code_edit.select(p0.y, p0.x, p.y, p.x)
+	elif p is Array:
+		assert(p.size() == 2)
+		if motion.get('inclusive', false):
+			p[1].x += 1
+		cursor.code_edit.select(p[0].y, p[0].x, p[1].y, p[1].x)
 	
 	# Add line_wise flag if line wise motion
 	var op: Dictionary = operator.duplicate()
@@ -412,29 +468,55 @@ static func event_to_string(event: InputEventKey) -> String:
 	return char(event.unicode)
 
 
-# Matches single command keys
+## Matches single command keys
+## expected_keys: Array[key: String] or Array[any_of_these_keys: Array[key: String]]
 static func match_keys(expected_keys: Array, input_keys: Array) -> KeyMatch:
-	if expected_keys[-1] == "{char}":
+	var in_size: int = input_keys.size()
+	var ex_size: int = expected_keys.size()
+	
+	if expected_keys[-1] is String and expected_keys[-1] == "{char}":
 		# If everything + {char} matches
-		if input_keys.slice(0, -1) == expected_keys.slice(0, -1) and input_keys.size() == expected_keys.size():
+		if _do_keys_match( input_keys.slice(0, -1), expected_keys.slice(0, -1) ):
 			return KeyMatch.Full
 		
 		# If everything up until {char} matches
-		elif expected_keys.slice(0, input_keys.size()) == input_keys:
+		elif _do_keys_match(input_keys, expected_keys.slice(0, in_size) ):
 			return KeyMatch.Partial
 	
 	else:
 		# Check for full match
-		if input_keys == expected_keys:
+		if _do_keys_match(input_keys, expected_keys):
 			return KeyMatch.Full
 		# Check for incomplete command (e.g. "ge", "gcc")
-		elif expected_keys.slice(0, input_keys.size()) == input_keys:
+		elif _do_keys_match(input_keys, expected_keys.slice(0, in_size)):
 			return KeyMatch.Partial
 		# Cases with operators like "dj", "ce"
-		elif input_keys.slice(0, expected_keys.size()) == expected_keys and input_keys.size() > expected_keys.size():
+		elif _do_keys_match(input_keys.slice(0, ex_size), expected_keys) and in_size > ex_size:
 			return KeyMatch.Full
 	
 	return KeyMatch.None
+
+## input_keys: Array[key: String]
+## expected_keys: Array[key: String] or Array[any_of_these_keys: Array[key: String]]
+static func _do_keys_match(input_keys: Array, match_keys: Array) -> bool:
+	if match_keys.size() != input_keys.size():
+		return false
+	
+	for i in input_keys.size():
+		var key: String = input_keys[i]
+		if match_keys[i] is String:
+			if !match_keys[i] == key:
+				return false
+		elif match_keys[i] is Array:
+			if !match_keys[i].has(key):
+				return false
+		else:
+			push_error("expected String or Array[String], found ", match_keys[i])
+			return false
+	
+	return true
+
+
 
 ## Clears the input stream
 func clear():

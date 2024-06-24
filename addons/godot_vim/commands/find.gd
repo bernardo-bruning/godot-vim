@@ -11,6 +11,7 @@ func execute(api : Dictionary, args: String):
 	if rmatch != null:
 		var pos: Vector2i = api.vim_plugin.idx_to_pos(api.code_edit, rmatch.get_start())
 		api.cursor.set_caret_pos(pos.y, pos.x)
+		# api.code_edit.center_viewport_to_caret()
 	else:
 		api.status_bar.display_error('Pattern not found: "%s"' % [api.command_line.search_pattern])
 	api.cursor.set_mode(Mode.NORMAL)

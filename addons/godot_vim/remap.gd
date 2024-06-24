@@ -1,9 +1,5 @@
 class_name KeyRemap extends RefCounted
 
-# TODO Configure via JSON file or Project Settings (if feasible)
-# or create config.gd with user configs inside
-
-
 const Constants = preload("res://addons/godot_vim/constants.gd")
 const Mode = Constants.Mode
 
