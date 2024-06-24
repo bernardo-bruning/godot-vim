@@ -73,14 +73,6 @@ func _input(event: InputEvent):
 		get_viewport().set_input_as_handled()
 
 
-## TODO Old commands we are yet to move (delete as they get implemented)
-# func handle_input_stream(stream: String) -> String:
-# 	if stream == '.':
-# 		if globals.has('last_command'):
-# 			handle_input_stream(globals.last_command)
-# 			call_deferred(&'set_mode', Mode.NORMAL)
-# 		return ''
-# 	return ''
 
 
 # Mostly used for commands like "w", "b", and "e"
@@ -117,7 +109,7 @@ func get_word_edge_pos(from_line: int, from_col: int, forward: bool, word_end: b
 
 
 """ Rough explanation:
-forward and end	->		criteria = current_empty and !previous_empty, no offset
+forward and end		->	criteria = current_empty and !previous_empty, no offset
 !forward and end	->	criteria = !current_empty and previous_empty, +1 offset
 forward and !end	->	criteria = !current_empty and previous_empty, -1 offset
 !forward and !end	->	criteria = current_empty and !previous_empty, no offset
@@ -126,7 +118,7 @@ criteria = (current_empty and !previous_empty)
 	if forward == end
 	else ( !(current_empty and !previous_empty) - search_dir )
 """
-# Get the 'edge' or a paragraph (like with { or } motions)
+## Get the 'edge' or a paragraph (like with { or } motions)
 func get_paragraph_edge_pos(from_line: int, forward: bool, paragraph_end: bool) -> int:
 	var search_dir: int = int(forward) - int(!forward) # 1 if forward else -1
 	var line: int = from_line
@@ -672,6 +664,8 @@ func cmd_jump_to_next_brace_pair(_args: Dictionary) -> Vector2i:
 ##		The end key of the text object
 ## - "inline": bool (default = false)
 ##		Forces the search to occur only in the current line
+## - "around": bool (default = false)
+##		Whether to select around (e.g. ab, aB, a[, a] in VIM)
 func cmd_text_object(args: Dictionary) -> Array[Vector2i]:
 	var p: Vector2i = get_caret_pos()
 	
@@ -695,14 +689,7 @@ func cmd_text_object(args: Dictionary) -> Array[Vector2i]:
 	# Deal with edge case where the cursor is already on the end
 	var p0x = p.x - 1 if get_char_at(p.y, p.x) == counterpart else p.x
 	# Look backwards to find start
-	var p0: Vector2i = find_brace(
-		p.y,
-		p0x,
-		counterpart,
-		obj,
-		false,
-		inline,
-	)
+	var p0: Vector2i = find_brace(p.y, p0x, counterpart, obj, false, inline)
 	
 	# Not found; try to look forward then
 	if p0.x == -1:
@@ -721,10 +708,9 @@ func cmd_text_object(args: Dictionary) -> Array[Vector2i]:
 	if p1 == Vector2i(-1, -1):
 		return [ p, p ]
 	
-	return [
-		p0 + Vector2i.RIGHT,
-		p1 + Vector2i.LEFT,
-	]
+	if args.get("around", false):
+		return [ p0, p1 ]
+	return [ p0 + Vector2i.RIGHT, p1 + Vector2i.LEFT ]
 
 
 ## Corresponds to the  iw, iW, aw, aW  motions in regular VIM
@@ -765,7 +751,9 @@ func cmd_text_object_word(args: Dictionary) -> Array[Vector2i]:
 	return [ p0, p1 ]
 
 ## Warning: changes the current mode to VISUAL_LINE
-## TODO documentation
+## Args:
+## - "around": bool (default = false)
+##		Whether to select around paragraphs (ap in VIM)
 func cmd_text_object_paragraph(args: Dictionary) -> Array[Vector2i]:
 	var p: Vector2i = get_caret_pos()
 	var p0: Vector2i = Vector2i(0, get_paragraph_edge_pos(p.y, false, false) + 1)
@@ -1010,9 +998,7 @@ func cmd_indent(args: Dictionary):
 
 ## Toggles whether the selected line(s) are commented
 func cmd_comment(_args: Dictionary):
-	var l0: int = code_edit.get_selection_from_line()\
-		# Fix bug where it comments one line above in VISUAL_LINE
-		+ int(mode == Mode.VISUAL_LINE)
+	var l0: int = code_edit.get_selection_from_line()
 	var l1: int = code_edit.get_selection_to_line()
 	var do_comment: bool = !is_line_commented( mini(l0, l1) )
 	

@@ -41,14 +41,14 @@ static func map() -> Array[KeyRemap]:
 	# Example:
 	return [
 		# In Insert mode, return to Normal mode with "jk"
-		KeyRemap.new([ "j", "i" ])
-			.action("normal", { "backspaces": 1, "offset": 0 })
-			.with_context(Mode.INSERT),
+		# KeyRemap.new([ "j", "k" ])
+			# .action("normal", { "backspaces": 1, "offset": 0 })
+			# .with_context(Mode.INSERT),
 		
 		# Make "/" search in case insensitive mode
-		KeyRemap.new([ "/" ])
-			.action("command", { "command": "/(?i)" })
-			.replace(),
+		# KeyRemap.new([ "/" ])
+			# .action("command", { "command": "/(?i)" })
+			# .replace(),
 		
 		# In Insert mode, return to Normal mode with "Ctrl-["
 		# KeyRemap.new([ "<C-[>" ])
@@ -139,14 +139,19 @@ var key_map: Array[Dictionary] = [
 	{ "keys": ["i", "p"], "type": Motion, "motion": { "type": "text_object_paragraph", "line_wise": true } },
 	{ "keys": ["a", "p"], "type": Motion, "motion": { "type": "text_object_paragraph", "around": true, "line_wise": true } },
 	
-	# TODO "around" text objects for these
-	{ "keys": ["i", "\""], "type": Motion, "motion": { "type": "text_object", "object": "\"", "inner": true, "inclusive": true, "inline": true } },
-	{ "keys": ["i", "'"], "type": Motion, "motion": { "type": "text_object", "object": "'", "inner": true, "inclusive": true, "inline": true } },
-	{ "keys": ["i", "`"], "type": Motion, "motion": { "type": "text_object", "object": "`", "inner": true, "inclusive": true, "inline": true } },
+	{ "keys": ["i", "\""], "type": Motion, "motion": { "type": "text_object", "object": "\"", "inclusive": true, "inline": true } },
+	{ "keys": ["a", "\""], "type": Motion, "motion": { "type": "text_object", "object": "\"", "around": true, "inclusive": true, "inline": true } },
+	{ "keys": ["i", "'"], "type": Motion, "motion": { "type": "text_object", "object": "'", "inclusive": true, "inline": true } },
+	{ "keys": ["a", "'"], "type": Motion, "motion": { "type": "text_object", "object": "'", "around": true, "inclusive": true, "inline": true } },
+	{ "keys": ["i", "`"], "type": Motion, "motion": { "type": "text_object", "object": "`", "inclusive": true, "inline": true } },
+	{ "keys": ["a", "`"], "type": Motion, "motion": { "type": "text_object", "object": "`", "around": true, "inclusive": true, "inline": true } },
 	# "i" + any of "(", ")", or "b"
-	{ "keys": ["i", ["(", ")", "b"]], "type": Motion, "motion": { "type": "text_object", "object": "(", "inner": true, "inclusive": true } },
-	{ "keys": ["i", ["[", "]"]], "type": Motion, "motion": { "type": "text_object", "object": "[", "inner": true, "inclusive": true } },
-	{ "keys": ["i", ["{", "}", "B"]], "type": Motion, "motion": { "type": "text_object", "object": "{", "inner": true, "inclusive": true } },
+	{ "keys": ["i", ["(", ")", "b"]], "type": Motion, "motion": { "type": "text_object", "object": "(", "inclusive": true } },
+	{ "keys": ["a", ["(", ")", "b"]], "type": Motion, "motion": { "type": "text_object", "object": "(", "around": true, "inclusive": true } },
+	{ "keys": ["i", ["[", "]"]], "type": Motion, "motion": { "type": "text_object", "object": "[", "inclusive": true } },
+	{ "keys": ["a", ["[", "]"]], "type": Motion, "motion": { "type": "text_object", "object": "[", "around": true, "inclusive": true } },
+	{ "keys": ["i", ["{", "}", "B"]], "type": Motion, "motion": { "type": "text_object", "object": "{", "inclusive": true } },
+	{ "keys": ["a", ["{", "}", "B"]], "type": Motion, "motion": { "type": "text_object", "object": "{", "around": true, "inclusive": true } },
 	
 	# OPERATORS
 	{ "keys": ["d"], "type": Operator, "operator": { "type": "delete" } },
