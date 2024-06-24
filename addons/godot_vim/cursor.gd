@@ -116,19 +116,35 @@ func get_word_edge_pos(from_line: int, from_col: int, forward: bool, word_end: b
 	return Vector2i(from_col, from_line)
 
 
+""" Rough explanation:
+forward and end	->		criteria = current_empty and !previous_empty, no offset
+!forward and end	->	criteria = !current_empty and previous_empty, +1 offset
+forward and !end	->	criteria = !current_empty and previous_empty, -1 offset
+!forward and !end	->	criteria = current_empty and !previous_empty, no offset
+
+criteria = (current_empty and !previous_empty)
+	if forward == end
+	else ( !(current_empty and !previous_empty) - search_dir )
+"""
 # Get the 'edge' or a paragraph (like with { or } motions)
-func get_paragraph_edge_pos(from_line: int, forward: bool) -> Vector2i:
+func get_paragraph_edge_pos(from_line: int, forward: bool, paragraph_end: bool) -> int:
 	var search_dir: int = int(forward) - int(!forward) # 1 if forward else -1
 	var line: int = from_line
 	var prev_empty: bool = code_edit.get_line(line) .strip_edges().is_empty()
+	var f_eq_end: bool = forward == paragraph_end
 	line += search_dir
+	
 	while line >= 0 and line < code_edit.get_line_count():
-		var text: String = code_edit.get_line(line) .strip_edges()
-		if text.is_empty() and !prev_empty:
-			return Vector2i(text.length(), line)
-		prev_empty = text.is_empty()
+		var current_empty: bool = code_edit.get_line(line) .strip_edges().is_empty()
+		if f_eq_end:
+			if current_empty and !prev_empty:
+				return line
+		elif !current_empty and prev_empty:
+			return line - search_dir
+		
+		prev_empty = current_empty
 		line += search_dir
-	return Vector2i(0, line)
+	return line
 
 
 # Get the 'edge' or a section (like with [[ or ]] motions)
@@ -475,8 +491,9 @@ func cmd_move_by_word(args: Dictionary) -> Vector2i:
 ## - "forward": bool
 ##		Whether to move forward (down) or backward (up)
 func cmd_move_by_paragraph(args: Dictionary) -> Vector2i:
-	var para_edge: Vector2i = get_paragraph_edge_pos(get_line(), args.get('forward', false))
-	return para_edge
+	var forward: bool = args.get('forward', false)
+	var line: int = get_paragraph_edge_pos(get_line(), forward, forward)
+	return Vector2i(0, line)
 
 ## Moves the cursor to the start of the line
 ## This is the VIM equivalent of "0"
@@ -703,36 +720,64 @@ func cmd_text_object(args: Dictionary) -> Array[Vector2i]:
 	]
 
 
-## TODO "aw" word object ("inner" = false). See `var key_map` in KeyMap
+## Corresponds to the  iw, iW, aw, aW  motions in regular VIM
+## Args:
+## - "around": bool (default = false)
+##		Whether to select around words (aw, aW in VIM)
+## - "big_word": bool (default = false)
+##		Whether this is a big word motion (iW, aW in VIM)
 func cmd_text_object_word(args: Dictionary) -> Array[Vector2i]:
-	if !args.get("inner", false):
-		push_warning("[GodotVIM] Not yet implemented: Outer word text object (aw, aW)")
-	
 	var is_big_word: bool = args.get("big_word", false)
 	
 	var p: Vector2i = get_caret_pos()
-	return [
-		get_word_edge_pos(p.y, p.x + 1, false, false, is_big_word),
-		get_word_edge_pos(p.y, p.x - 1, true, true, is_big_word)
-	]
+	var p0 = get_word_edge_pos(p.y, p.x + 1, false, false, is_big_word)
+	var p1 = get_word_edge_pos(p.y, p.x - 1, true, true, is_big_word)
+	
+	if !args.get("around", false):
+		# Inner word (iw, iW)
+		return [ p0, p1 ]
+	
+	# Around word (aw, aW)
+	var text: String = get_line_text(p.y)
+	# Whether char to the RIGHT is a space
+	var next_char_is_space: bool = SPACES.contains(
+		text[ mini(p1.x + 1, text.length() - 1) ]
+	)
+	if next_char_is_space:
+		p1.x = get_word_edge_pos(p1.y, p1.x, true, false, false).x - 1
+		return [ p0, p1 ]
+	
+	# Whether char to the LEFT is a space
+	next_char_is_space = SPACES.contains(
+		text[ maxi(p0.x - 1, 0) ]
+	)
+	if next_char_is_space:
+		p0.x = get_word_edge_pos(p0.y, p0.x, false, true, false).x + 1
+		return [ p0, p1 ]
+	
+	return [ p0, p1 ]
 
-## TODO "ap" word object ("inner" = false). See `var key_map` in KeyMap
-## Warning: changes the current mode to VISUAL_LINE if in VISUAL
+## Warning: changes the current mode to VISUAL_LINE
+## TODO documentation
 func cmd_text_object_paragraph(args: Dictionary) -> Array[Vector2i]:
-	if !args.get("inner", false):
-		push_warning("[GodotVIM] Not yet implemented: Outer paragraph text object (ap)")
-	
 	var p: Vector2i = get_caret_pos()
-	var p0: Vector2i = get_paragraph_edge_pos(p.y, false)
-	var p1: Vector2i = get_paragraph_edge_pos(p.y, true)
+	var p0: Vector2i = Vector2i(0, get_paragraph_edge_pos(p.y, false, false) + 1)
+	var p1: Vector2i = Vector2i(0, get_paragraph_edge_pos(p.y, true, true) - 1)
 	
-	if mode == Mode.VISUAL:
+	if !args.get("around", false):
+		# Inner paragraph (ip)
 		set_mode(Mode.VISUAL_LINE)
+		return [ p0, p1 ]
 	
-	return [
-		p0 + Vector2i.DOWN,
-		p1 + Vector2i.UP
-	]
+	# Extend downwards
+	if p1.y < code_edit.get_line_count() - 1:
+		p1.y = get_paragraph_edge_pos(p1.y, true, false)
+	# Extend upwards
+	elif p0.y > 0:
+		p0.y = get_paragraph_edge_pos(p0.y - 1, false, true)
+	
+	set_mode(Mode.VISUAL_LINE)
+	return [ p0, p1 ]
 
 
 
@@ -1011,6 +1056,4 @@ func cmd_visual_jump_to_other_end(args: Dictionary):
 	var p: Vector2i = selection_from
 	selection_from = get_caret_pos()
 	set_caret_pos(p.y, p.x)
-
-
 #endregion COMMANDS
