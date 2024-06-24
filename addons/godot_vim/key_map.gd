@@ -139,18 +139,14 @@ var key_map: Array[Dictionary] = [
 	{ "keys": ["i", "p"], "type": Motion, "motion": { "type": "text_object_paragraph", "line_wise": true } },
 	{ "keys": ["a", "p"], "type": Motion, "motion": { "type": "text_object_paragraph", "around": true, "line_wise": true } },
 	
-	# TODO around text objects for these
+	# TODO "around" text objects for these
 	{ "keys": ["i", "\""], "type": Motion, "motion": { "type": "text_object", "object": "\"", "inner": true, "inclusive": true, "inline": true } },
 	{ "keys": ["i", "'"], "type": Motion, "motion": { "type": "text_object", "object": "'", "inner": true, "inclusive": true, "inline": true } },
 	{ "keys": ["i", "`"], "type": Motion, "motion": { "type": "text_object", "object": "`", "inner": true, "inclusive": true, "inline": true } },
-	{ "keys": ["i", "("], "type": Motion, "motion": { "type": "text_object", "object": "(", "inner": true, "inclusive": true } },
-	{ "keys": ["i", ")"], "type": Motion, "motion": { "type": "text_object", "object": "(", "inner": true, "inclusive": true } },
-	{ "keys": ["i", "b"], "type": Motion, "motion": { "type": "text_object", "object": "(", "inner": true, "inclusive": true } },
-	{ "keys": ["i", "["], "type": Motion, "motion": { "type": "text_object", "object": "[", "inner": true, "inclusive": true } },
-	{ "keys": ["i", "]"], "type": Motion, "motion": { "type": "text_object", "object": "[", "inner": true, "inclusive": true } },
-	{ "keys": ["i", "{"], "type": Motion, "motion": { "type": "text_object", "object": "{", "inner": true, "inclusive": true } },
-	{ "keys": ["i", "}"], "type": Motion, "motion": { "type": "text_object", "object": "{", "inner": true, "inclusive": true } },
-	{ "keys": ["i", "B"], "type": Motion, "motion": { "type": "text_object", "object": "{", "inner": true, "inclusive": true } },
+	# "i" + any of "(", ")", or "b"
+	{ "keys": ["i", ["(", ")", "b"]], "type": Motion, "motion": { "type": "text_object", "object": "(", "inner": true, "inclusive": true } },
+	{ "keys": ["i", ["[", "]"]], "type": Motion, "motion": { "type": "text_object", "object": "[", "inner": true, "inclusive": true } },
+	{ "keys": ["i", ["{", "}", "B"]], "type": Motion, "motion": { "type": "text_object", "object": "{", "inner": true, "inclusive": true } },
 	
 	# OPERATORS
 	{ "keys": ["d"], "type": Operator, "operator": { "type": "delete" } },
@@ -339,7 +335,7 @@ func find_cmd(keys: Array[String], with_context: Mode, blacklist: Array = []) ->
 		var cmd_mut: Dictionary = cmd.duplicate(true) # 'mut' ('mutable') because key_map is read-only
 		# Keep track of selected character, which will later be copied into the fucntion call for the command
 		# (See execute() where we check if cmd.has('selected_char'))
-		if cmd.keys[-1] == '{char}':
+		if cmd.keys[-1] is String and cmd.keys[-1] == '{char}':
 			cmd_mut.selected_char = keys.back()
 		return cmd_mut
 	
@@ -467,29 +463,55 @@ static func event_to_string(event: InputEventKey) -> String:
 	return char(event.unicode)
 
 
-# Matches single command keys
+## Matches single command keys
+## expected_keys: Array[key: String] or Array[any_of_these_keys: Array[key: String]]
 static func match_keys(expected_keys: Array, input_keys: Array) -> KeyMatch:
-	if expected_keys[-1] == "{char}":
+	var in_size: int = input_keys.size()
+	var ex_size: int = expected_keys.size()
+	
+	if expected_keys[-1] is String and expected_keys[-1] == "{char}":
 		# If everything + {char} matches
-		if input_keys.slice(0, -1) == expected_keys.slice(0, -1) and input_keys.size() == expected_keys.size():
+		if _do_keys_match( input_keys.slice(0, -1), expected_keys.slice(0, -1) ):
 			return KeyMatch.Full
 		
 		# If everything up until {char} matches
-		elif expected_keys.slice(0, input_keys.size()) == input_keys:
+		elif _do_keys_match(input_keys, expected_keys.slice(0, in_size) ):
 			return KeyMatch.Partial
 	
 	else:
 		# Check for full match
-		if input_keys == expected_keys:
+		if _do_keys_match(input_keys, expected_keys):
 			return KeyMatch.Full
 		# Check for incomplete command (e.g. "ge", "gcc")
-		elif expected_keys.slice(0, input_keys.size()) == input_keys:
+		elif _do_keys_match(input_keys, expected_keys.slice(0, in_size)):
 			return KeyMatch.Partial
 		# Cases with operators like "dj", "ce"
-		elif input_keys.slice(0, expected_keys.size()) == expected_keys and input_keys.size() > expected_keys.size():
+		elif _do_keys_match(input_keys.slice(0, ex_size), expected_keys) and in_size > ex_size:
 			return KeyMatch.Full
 	
 	return KeyMatch.None
+
+## input_keys: Array[key: String]
+## expected_keys: Array[key: String] or Array[any_of_these_keys: Array[key: String]]
+static func _do_keys_match(input_keys: Array, match_keys: Array) -> bool:
+	if match_keys.size() != input_keys.size():
+		return false
+	
+	for i in input_keys.size():
+		var key: String = input_keys[i]
+		if match_keys[i] is String:
+			if !match_keys[i] == key:
+				return false
+		elif match_keys[i] is Array:
+			if !match_keys[i].has(key):
+				return false
+		else:
+			push_error("expected String or Array[String], found ", match_keys[i])
+			return false
+	
+	return true
+
+
 
 ## Clears the input stream
 func clear():

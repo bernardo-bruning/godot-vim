@@ -342,6 +342,12 @@ func get_line_text(line: int = -1) -> String:
 		return code_edit.get_line(get_line())
 	return code_edit.get_line(line)
 
+func get_char_at(line: int, col: int) -> String:
+	var text: String = code_edit.get_line(line)
+	if col > 0 and col < text.length():
+		return text[col]
+	return ""
+
 func get_line_length(line: int = -1) -> int:
 	return get_line_text(line).length()
 
@@ -404,6 +410,7 @@ func is_line_section(text: String) -> bool:
 			return t.ends_with("{") and !SPACES.contains(text.left(1))
 		LANGUAGE.GDSCRIPT:
 			return t.begins_with("func")\
+				or t.begins_with("static func")\
 				or t.begins_with("class")\
 				or t.begins_with("#region")
 		_:
@@ -686,7 +693,7 @@ func cmd_text_object(args: Dictionary) -> Array[Vector2i]:
 	var inline: bool = args.get("inline", false)
 	
 	# Deal with edge case where the cursor is already on the end
-	var p0x = p.x - 1 if get_line_text(p.y)[p.x] == counterpart else p.x
+	var p0x = p.x - 1 if get_char_at(p.y, p.x) == counterpart else p.x
 	# Look backwards to find start
 	var p0: Vector2i = find_brace(
 		p.y,
