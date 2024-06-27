@@ -257,6 +257,8 @@ func get_shader_tabcontainer():
 
 
 func _select(obj: Node, types: Array[String]):
+	if not obj:
+		return null
 	for type in types:
 		for child in obj.get_children():
 			if child.is_class(type):
