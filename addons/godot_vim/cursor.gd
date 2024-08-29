@@ -15,8 +15,11 @@ var status_bar: StatusBar
 var key_map: KeyMap
 
 var mode: Mode = Mode.NORMAL
-var selection_from: Vector2i = Vector2i() # For visual modes
-var selection_to: Vector2i = Vector2i() # For visual modes
+# For visual modes:
+# `selection_from` is the origin point of the selection
+# code_edit's caret pos is the end point of the selection (the one the user can move)
+var selection_from: Vector2i = Vector2i()
+
 var globals: Dictionary = {}
 
 func _init():
@@ -39,7 +42,6 @@ func focus_entered():
 func reset_normal():
 	set_mode(Mode.NORMAL)
 	selection_from = Vector2i.ZERO
-	selection_to = Vector2i.ZERO
 	set_column(code_edit.get_caret_column())
 
 
@@ -60,6 +62,7 @@ func _input(event: InputEvent):
 	# See KeyMap.key_map, KeyMap.register_event()
 	var registered_cmd: Dictionary = key_map.register_event(event, mode)
 	
+	# Display keys in status bar
 	if mode == Mode.NORMAL or is_mode_visual(mode):
 		status_bar.set_keys_text(key_map.get_input_stream_as_string())
 	else:
@@ -67,42 +70,35 @@ func _input(event: InputEvent):
 	
 	if KeyMap.is_cmd_valid(registered_cmd):
 		code_edit.cancel_code_completion()
+		get_viewport().set_input_as_handled()
 
 
-## TODO Old commands we are yet to move (delete as they get implemented)
-# func handle_input_stream(stream: String) -> String:
-# 	if stream == '.':
-# 		if globals.has('last_command'):
-# 			handle_input_stream(globals.last_command)
-# 			call_deferred(&'set_mode', Mode.NORMAL)
-# 		return ''
-# 	return ''
 
 
 # Mostly used for commands like "w", "b", and "e"
-# Bitmask bits:
-#  0 = char is normal char, 1 = char is keyword, 2 = chcar is space
-# TODO bug where it doesn't stop at line start: func get_char_wrapping()
 func get_word_edge_pos(from_line: int, from_col: int, forward: bool, word_end: bool, big_word: bool) -> Vector2i:
 	var search_dir: int = int(forward) - int(!forward) # 1 if forward else -1
 	var line: int = from_line
-	# Nudge it by (going backwards) + (word end ("e") or beginning ("b"))
-	var col: int = from_col + search_dir * (int(!forward) + int(word_end == forward))
+	# Think of `col` as the place in between the two chars we're testing
+	var col: int = from_col + search_dir\
+		+ int(word_end) # Also nudge it once if checking word ends ("e" or "ge")
+	# Char groups:  0 = char is normal char, 1 = char is keyword, 2 = char is space
 	# Cancel 1st bit (keywords) if big word so that keywords and normal chars are treated the same
 	var big_word_mask: int = 0b10 if big_word else 0b11
 	
 	var text: String = get_line_text(line)
 	while line >= 0 and line < code_edit.get_line_count():
-		while col >= 0 and col < text.length():
-			var char: String = text[col]
-			var right: String = ' ' if col == text.length()-1 else text[col + 1] # ' ' if eol else the char to the right
+		while col >= 0 and col <= text.length():
+			# Get "group" of chars to the left and right of `col`
+			var left_char: String = ' ' if col == 0 else text[col - 1]
+			var right_char: String = ' ' if col == text.length() else text[col] # ' ' if eol; else, the char to the right
+			var lg: int = (int(KEYWORDS.contains(left_char)) | (int(SPACES.contains(left_char)) << 1)) & big_word_mask
+			var rg: int = (int(KEYWORDS.contains(right_char)) | (int(SPACES.contains(right_char)) << 1)) & big_word_mask
 			
-			var a: int = (int(KEYWORDS.contains(char)) | (int(SPACES.contains(char)) << 1)) & big_word_mask
-			var b: int = (int(KEYWORDS.contains(right)) | (int(SPACES.contains(right)) << 1)) & big_word_mask
-			
-			# Same as:	if a != b and (a if word_end else b) != 2	but without branching
-			if a != b and a*int(word_end) + b*int(!word_end) != 2:
-				return Vector2i(col + int(!word_end), line)
+			# Same as:	if lg != rg and (lg if word_end else rg) != 2	but without branching
+			# (is different group) and (spaces don't count in the wrong direction)
+			if lg != rg            and lg*int(word_end) + rg*int(!word_end) != 0b10:
+				return Vector2i(col - int(word_end), line)
 			
 			col += search_dir
 		line += search_dir
@@ -112,19 +108,35 @@ func get_word_edge_pos(from_line: int, from_col: int, forward: bool, word_end: b
 	return Vector2i(from_col, from_line)
 
 
-# Get the 'edge' or a paragraph (like with { or } motions)
-func get_paragraph_edge_pos(from_line: int, forward: bool) -> Vector2i:
-	var search_dir: int = int(forward) - int(!forward)
+""" Rough explanation:
+forward and end		->	criteria = current_empty and !previous_empty, no offset
+!forward and end	->	criteria = !current_empty and previous_empty, +1 offset
+forward and !end	->	criteria = !current_empty and previous_empty, -1 offset
+!forward and !end	->	criteria = current_empty and !previous_empty, no offset
+
+criteria = (current_empty and !previous_empty)
+	if forward == end
+	else ( !(current_empty and !previous_empty) - search_dir )
+"""
+## Get the 'edge' or a paragraph (like with { or } motions)
+func get_paragraph_edge_pos(from_line: int, forward: bool, paragraph_end: bool) -> int:
+	var search_dir: int = int(forward) - int(!forward) # 1 if forward else -1
 	var line: int = from_line
 	var prev_empty: bool = code_edit.get_line(line) .strip_edges().is_empty()
+	var f_eq_end: bool = forward == paragraph_end
 	line += search_dir
+	
 	while line >= 0 and line < code_edit.get_line_count():
-		var text: String = code_edit.get_line(line) .strip_edges()
-		if text.is_empty() and !prev_empty:
-			return Vector2i(text.length(), line)
-		prev_empty = text.is_empty()
+		var current_empty: bool = code_edit.get_line(line) .strip_edges().is_empty()
+		if f_eq_end:
+			if current_empty and !prev_empty:
+				return line
+		elif !current_empty and prev_empty:
+			return line - search_dir
+		
+		prev_empty = current_empty
 		line += search_dir
-	return Vector2i(0, line)
+	return line
 
 
 # Get the 'edge' or a section (like with [[ or ]] motions)
@@ -146,6 +158,9 @@ func get_section_edge_pos(from_line: int, forward: bool) -> Vector2i:
 
 
 
+## Finds the next -- or previous is `forward = false` -- occurence of `char` in the line `line`,
+##  starting from col `from_col`
+## Additionally, it can stop before the occurence with `stop_before = true`
 func find_char_in_line(line: int, from_col: int, forward: bool, stop_before: bool, char: String) -> int:
 	var text: String = get_line_text(line)
 	
@@ -160,7 +175,75 @@ func find_char_in_line(line: int, from_col: int, forward: bool, stop_before: boo
 	return col + (int(!forward) - int(forward)) * int(stop_before)
 
 
-# TODO maybe cache if it's going to be an issue
+## Finds the next -- or previous if `forward = false` -- occurence of any character in `chars`
+## if `chars` has only one character, it will look for that one
+func find_next_occurence_of_chars(
+	from_line: int,
+	from_col: int,
+	chars: String,
+	forward: bool,
+) -> Vector2i:
+	var p: Vector2i = Vector2i(from_col, from_line)
+	var line_count: int = code_edit.get_line_count()
+	var search_dir: int = int(forward) - int(!forward) # 1 if forward, -1 if backwards
+	
+	var text: String = get_line_text(p.y)
+	while p.y >= 0 and p.y < line_count:
+		while p.x >= 0 and p.x < text.length():
+			if chars.contains(text[p.x]):
+				return p
+			p.x += search_dir
+		p.y += search_dir
+		text = get_line_text(p.y)
+		p.x = (text.length() - 1) * int(!forward) # 0 if forwards, EOL if backwards
+	# Not found
+	# i want optional typing to be in godot so bad
+	return Vector2i(-1, -1)
+
+
+## Finds the next / previous brace specified by `brace` and its closing `counterpart`
+## `force_inline` forces to look only in the line `from_line` (See constants.gd::INLINE_BRACKETS)
+## E.g.
+##  brace = "(", counterpart = ")", forward = false, from_line and from_col = in between the brackets
+##  will find the start of the set of parantheses the cursor is inside of
+func find_brace(
+	from_line: int,
+	from_col: int,
+	brace: String,
+	counterpart: String,
+	forward: bool,
+	force_inline: bool = false,
+) -> Vector2i:
+	var line_count: int = code_edit.get_line_count()
+	var d: int = int(forward) - int(!forward)
+	
+	var p: Vector2i = Vector2i(from_col + d, from_line)
+	var stack: int = 0
+	
+	var text: String = get_line_text(p.y)
+	while p.y >= 0 and p.y < line_count:
+		while p.x >= 0 and p.x < text.length():
+			var char: String = text[p.x]
+			
+			if char == counterpart:
+				if stack == 0:
+					return p
+				stack -= 1
+			elif char == brace:
+				stack += 1
+			p.x += d
+		
+		if force_inline:
+			return Vector2i(-1, -1)
+		
+		p.y += d
+		text = get_line_text(p.y)
+		p.x = (text.length() - 1) * int(!forward) # 0 if forwards, EOL if backwards
+	
+	# i want optional typing to be in godot so bad rn
+	return Vector2i(-1, -1)
+
+
 func get_comment_char() -> String:
 	match language:
 		LANGUAGE.SHADER:
@@ -194,13 +277,13 @@ func set_mode(m: int):
 	var old_mode: int = mode
 	mode = m
 	command_line.close()
+	
 	match mode:
 		Mode.NORMAL:
 			code_edit.call_deferred("cancel_code_completion")
 			key_map.clear()
 			
 			code_edit.remove_secondary_carets() # Secondary carets are used when searching with '/' (See command_line.gd)
-			code_edit.deselect()
 			code_edit.release_focus()
 			code_edit.deselect()
 			self.grab_focus()
@@ -208,22 +291,20 @@ func set_mode(m: int):
 			
 			# Insert -> Normal
 			if old_mode == Mode.INSERT:
-				code_edit.end_complex_operation() # See Mode.INSERT match arm below
+				# code_edit.end_complex_operation() # See Mode.INSERT match arm below
 				move_column(-1)
 		
 		Mode.VISUAL:
 			if old_mode != Mode.VISUAL_LINE:
 				selection_from = Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
-				selection_to = Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
-			set_caret_pos(selection_to.y, selection_to.x)
 			status_bar.set_mode_text(Mode.VISUAL)
+			update_visual_selection()
 		
 		Mode.VISUAL_LINE:
 			if old_mode != Mode.VISUAL:
 				selection_from = Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
-				selection_to = Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
-			set_caret_pos(selection_to.y, selection_to.x)
 			status_bar.set_mode_text(Mode.VISUAL_LINE)
+			update_visual_selection()
 		
 		Mode.COMMAND:
 			command_line.show()
@@ -234,10 +315,10 @@ func set_mode(m: int):
 			code_edit.call_deferred("grab_focus")
 			status_bar.set_mode_text(Mode.INSERT)
 			
-			if old_mode == Mode.NORMAL:
+			# if old_mode == Mode.NORMAL:
 				# Complex operation so that entire insert mode actions can be undone
 				# with one undo
-				code_edit.begin_complex_operation()
+				# code_edit.begin_complex_operation()
 		
 		_:
 			push_error("[vim::cursor::set_mode()] Unknown mode %s" % mode)
@@ -246,14 +327,18 @@ func move_line(offset:int):
 	set_line(get_line() + offset)
 
 func get_line() -> int:
-	if is_mode_visual(mode):
-		return selection_to.y
 	return code_edit.get_caret_line()
 
 func get_line_text(line: int = -1) -> String:
 	if line == -1:
 		return code_edit.get_line(get_line())
 	return code_edit.get_line(line)
+
+func get_char_at(line: int, col: int) -> String:
+	var text: String = code_edit.get_line(line)
+	if col > 0 and col < text.length():
+		return text[col]
+	return ""
 
 func get_line_length(line: int = -1) -> int:
 	return get_line_text(line).length()
@@ -266,35 +351,35 @@ func get_caret_pos() -> Vector2i:
 	return Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
 
 func set_line(position:int):
-	if !is_mode_visual(mode):
-		code_edit.set_caret_line(min(position, code_edit.get_line_count()-1))
-		return
+	code_edit.set_caret_line(min(position, code_edit.get_line_count()-1))
 	
-	selection_to = Vector2i( clampi(selection_to.x, 0, get_line_length(position)), clampi(position, 0, code_edit.get_line_count()) )
-	update_visual_selection()
+	if is_mode_visual(mode):
+		update_visual_selection()
 
 
 func move_column(offset: int):
 	set_column(get_column()+offset)
 	
 func get_column():
-	if is_mode_visual(mode):
-		return selection_to.x
 	return code_edit.get_caret_column()
 
 func set_column(position: int):
-	if !is_mode_visual(mode):
-		var line: String = code_edit.get_line(code_edit.get_caret_line())
-		code_edit.set_caret_column(min(line.length(), position))
-		return
+	code_edit.set_caret_column(min(get_line_length(), position))
 	
-	selection_to = Vector2i( clampi(position, 0, get_line_length(selection_to.y)), clampi(selection_to.y, 0, code_edit.get_line_count()) )
-	update_visual_selection()
+	if is_mode_visual(mode):
+		update_visual_selection()
+
+func select(from_line: int, from_col: int, to_line: int, to_col: int):
+	code_edit.select(from_line, from_col, to_line, to_col + 1)
+	selection_from = Vector2i(from_col, from_line)
+	set_caret_pos(to_line, to_col)
+	# status_bar.set_mode_text(Mode.VISUAL)
 
 func update_visual_selection():
+	var selection_to: Vector2i = Vector2i(code_edit.get_caret_column(), code_edit.get_caret_line())
 	if mode == Mode.VISUAL:
-		var to_right: bool = selection_to.x >= selection_from.x or selection_to.y > selection_from.y
-		code_edit.select( selection_from.y, selection_from.x + int(!to_right), selection_to.y, selection_to.x + int(to_right) )
+		var backwards: bool = selection_to.x < selection_from.x if selection_to.y == selection_from.y else selection_to.y < selection_from.y
+		code_edit.select(selection_from.y, selection_from.x + int(backwards), selection_to.y, selection_to.x + int(!backwards))
 	elif mode == Mode.VISUAL_LINE:
 		var f: int = mini(selection_from.y, selection_to.y) - 1
 		var t: int = maxi(selection_from.y, selection_to.y)
@@ -317,6 +402,7 @@ func is_line_section(text: String) -> bool:
 			return t.ends_with("{") and !SPACES.contains(text.left(1))
 		LANGUAGE.GDSCRIPT:
 			return t.begins_with("func")\
+				or t.begins_with("static func")\
 				or t.begins_with("class")\
 				or t.begins_with("#region")
 		_:
@@ -329,7 +415,6 @@ func get_stream_char(stream: String, idx: int) -> String:
 func draw_cursor():
 	if code_edit.is_dragging_cursor():
 		selection_from = Vector2i(code_edit.get_selection_from_column(), code_edit.get_selection_from_line())
-		selection_to = Vector2i(code_edit.get_selection_to_column(), code_edit.get_selection_to_line())
 	
 	if code_edit.get_selected_text(0).length() > 1 and !is_mode_visual(mode):
 		code_edit.release_focus()
@@ -372,6 +457,17 @@ func cmd_move_by_chars(args: Dictionary) -> Vector2i:
 func cmd_move_by_lines(args: Dictionary) -> Vector2i:
 	return Vector2i(get_column(), get_line() + args.get("move_by", 0))
 
+## Moves the cursor vertically by a certain percentage of the screen / page
+## Args:
+## - "percentage": float
+##		How much to move by
+##		E.g. percentage = 0.5 will move down half a screen, 
+##		percentage = -1.0 will move up a full screen
+func cmd_move_by_screen(args: Dictionary) -> Vector2i:
+	var h: int = code_edit.get_visible_line_count()
+	var amt: int = int( h * args.get("percentage", 0.0) )
+	return Vector2i(get_column(), get_line() + amt)
+
 ## Moves the cursor by word
 ## Args:
 ## - "forward": bool
@@ -394,8 +490,9 @@ func cmd_move_by_word(args: Dictionary) -> Vector2i:
 ## - "forward": bool
 ##		Whether to move forward (down) or backward (up)
 func cmd_move_by_paragraph(args: Dictionary) -> Vector2i:
-	var para_edge: Vector2i = get_paragraph_edge_pos(get_line(), args.get('forward', false))
-	return para_edge
+	var forward: bool = args.get('forward', false)
+	var line: int = get_paragraph_edge_pos(get_line(), forward, forward)
+	return Vector2i(0, line)
 
 ## Moves the cursor to the start of the line
 ## This is the VIM equivalent of "0"
@@ -520,6 +617,170 @@ func cmd_move_by_section(args: Dictionary) -> Vector2i:
 	return section_edge
 
 
+## Corresponds to the % motion in VIM
+func cmd_jump_to_next_brace_pair(_args: Dictionary) -> Vector2i:
+	const PAIRS = Constants.PAIRS
+	var p: Vector2i = get_caret_pos()
+	
+	var p0: Vector2i = find_next_occurence_of_chars(p.y, p.x, Constants.BRACES, true)
+	# Not found
+	if p0.x < 0 or p0.y < 0:
+		return p
+	
+	var brace: String = code_edit.get_line(p0.y)[p0.x]
+	# Whether this brace is an opening or closing brace. i.e. ([{ or }])
+	var is_closing_brace: bool = PAIRS.values().has(brace)
+	var closing_counterpart: String = ""
+	if is_closing_brace:
+		var idx: int = PAIRS.values().find(brace)
+		if idx != -1:
+			closing_counterpart = brace
+			brace = PAIRS.keys()[idx]
+	else:
+		closing_counterpart = PAIRS.get(brace, "")
+	if closing_counterpart.is_empty():
+		push_error("[GodotVIM] Failed to get counterpart for brace: ", brace)
+		return p
+	
+	var p1: Vector2i = find_brace(p0.y, p0.x, closing_counterpart, brace, false)\
+		if is_closing_brace\
+		else find_brace(p0.y, p0.x, brace, closing_counterpart, true)
+	
+	if p1 == Vector2i(-1, -1):
+		return p0
+	
+	return p1
+
+
+#region TEXT OBJECTS
+# Text Object commands must return two Vector2is with the cursor start and end position
+
+## Get the bounds of the text object specified in args
+## Args:
+## - "object": String
+##		The text object to select. Should ideally be a key in constants.gd::PAIRS but doesn't have to
+##		If "object" is not in constants.gd::PAIRS, then "counterpart" must be specified
+## - "counterpart": String (optional)
+##		The end key of the text object
+## - "inline": bool (default = false)
+##		Forces the search to occur only in the current line
+## - "around": bool (default = false)
+##		Whether to select around (e.g. ab, aB, a[, a] in VIM)
+func cmd_text_object(args: Dictionary) -> Array[Vector2i]:
+	var p: Vector2i = get_caret_pos()
+	
+	# Get start and end keys
+	if !args.has("object"):
+		push_error("[GodotVim] Error on cmd_text_object: No object selected")
+		return [ p, p ]
+	
+	var obj: String = args.object
+	var counterpart: String
+	if args.has("counterpart"):
+		counterpart = args.counterpart
+	elif Constants.PAIRS.has(obj):
+		counterpart = Constants.PAIRS[obj]
+	else:
+		push_error("[GodotVim] Error on cmd_text_object: Invalid brace pair: \"", obj, "\". You can specify an end key with the argument `counterpart: String`")
+		return [ p, p ]
+	
+	var inline: bool = args.get("inline", false)
+	
+	# Deal with edge case where the cursor is already on the end
+	var p0x = p.x - 1 if get_char_at(p.y, p.x) == counterpart else p.x
+	# Look backwards to find start
+	var p0: Vector2i = find_brace(p.y, p0x, counterpart, obj, false, inline)
+	
+	# Not found; try to look forward then
+	if p0.x == -1:
+		if inline:
+			var col: int = find_char_in_line(p.y, p0x, true, false, obj)
+			p0 = Vector2i(col, p.y)
+		else:
+			p0 = find_next_occurence_of_chars(p.y, p0x, obj, true)
+		
+		if p0.x == -1:
+			return [ p, p ]
+	
+	# Look forwards to find end
+	var p1: Vector2i = find_brace(p0.y, p0.x, obj, counterpart, true, inline)
+	
+	if p1 == Vector2i(-1, -1):
+		return [ p, p ]
+	
+	if args.get("around", false):
+		return [ p0, p1 ]
+	return [ p0 + Vector2i.RIGHT, p1 + Vector2i.LEFT ]
+
+
+## Corresponds to the  iw, iW, aw, aW  motions in regular VIM
+## Args:
+## - "around": bool (default = false)
+##		Whether to select around words (aw, aW in VIM)
+## - "big_word": bool (default = false)
+##		Whether this is a big word motion (iW, aW in VIM)
+func cmd_text_object_word(args: Dictionary) -> Array[Vector2i]:
+	var is_big_word: bool = args.get("big_word", false)
+	
+	var p: Vector2i = get_caret_pos()
+	var p0 = get_word_edge_pos(p.y, p.x + 1, false, false, is_big_word)
+	var p1 = get_word_edge_pos(p.y, p.x - 1, true, true, is_big_word)
+	
+	if !args.get("around", false):
+		# Inner word (iw, iW)
+		return [ p0, p1 ]
+	
+	# Around word (aw, aW)
+	var text: String = get_line_text(p.y)
+	# Whether char to the RIGHT is a space
+	var next_char_is_space: bool = SPACES.contains(
+		text[ mini(p1.x + 1, text.length() - 1) ]
+	)
+	if next_char_is_space:
+		p1.x = get_word_edge_pos(p1.y, p1.x, true, false, false).x - 1
+		return [ p0, p1 ]
+	
+	# Whether char to the LEFT is a space
+	next_char_is_space = SPACES.contains(
+		text[ maxi(p0.x - 1, 0) ]
+	)
+	if next_char_is_space:
+		p0.x = get_word_edge_pos(p0.y, p0.x, false, true, false).x + 1
+		return [ p0, p1 ]
+	
+	return [ p0, p1 ]
+
+## Warning: changes the current mode to VISUAL_LINE
+## Args:
+## - "around": bool (default = false)
+##		Whether to select around paragraphs (ap in VIM)
+func cmd_text_object_paragraph(args: Dictionary) -> Array[Vector2i]:
+	var p: Vector2i = get_caret_pos()
+	var p0: Vector2i = Vector2i(0, get_paragraph_edge_pos(p.y, false, false) + 1)
+	var p1: Vector2i = Vector2i(0, get_paragraph_edge_pos(p.y, true, true) - 1)
+	
+	if !args.get("around", false):
+		# Inner paragraph (ip)
+		set_mode(Mode.VISUAL_LINE)
+		return [ p0, p1 ]
+	
+	# Extend downwards
+	if p1.y < code_edit.get_line_count() - 1:
+		p1.y = get_paragraph_edge_pos(p1.y, true, false)
+	# Extend upwards
+	elif p0.y > 0:
+		p0.y = get_paragraph_edge_pos(p0.y - 1, false, true)
+	
+	set_mode(Mode.VISUAL_LINE)
+	return [ p0, p1 ]
+
+
+
+
+#endregion TEXT OBJECTS
+
+
+
 #endregion MOTIONS
 
 #region ACTIONS
@@ -572,7 +833,7 @@ func cmd_normal(args: Dictionary):
 		move_column( args.offset )
 
 ## Switches to Visual mode
-## if "line_wise" (optional) is true, it will switch to VisualLine instead
+## if "line_wise": bool (optional) is true, it will switch to VisualLine instead
 func cmd_visual(args: Dictionary):
 	if args.get('line_wise', false):
 		set_mode(Mode.VISUAL_LINE)
@@ -680,6 +941,7 @@ func cmd_delete(args: Dictionary):
 		call_deferred(&"move_line", +1)
 	
 	code_edit.cut()
+	
 	if mode != Mode.NORMAL:
 		set_mode(Mode.NORMAL)
 
@@ -710,13 +972,14 @@ func cmd_change(args: Dictionary):
 
 func cmd_paste(_args: Dictionary):
 	code_edit.begin_complex_operation()
-	if is_mode_visual(mode):
-		code_edit.delete_selection()
-	if DisplayServer.clipboard_get().begins_with('\r\n'):
-		set_column(get_line_length())
-	else:
-		move_column(+1)
-	code_edit.deselect()
+	
+	if !is_mode_visual(mode):
+		if DisplayServer.clipboard_get().begins_with('\r\n'):
+			set_column(get_line_length())
+		else:
+			move_column(+1)
+		code_edit.deselect()
+	
 	code_edit.paste()
 	move_column(-1)
 	code_edit.end_complex_operation()
@@ -774,6 +1037,16 @@ func cmd_toggle_uppercase(_args: Dictionary):
 	
 	set_mode(Mode.NORMAL)
 
+
 #endregion OPERATIONS
 
+## Corresponds to 'o' in Visual mode in regular Vim
+func cmd_visual_jump_to_other_end(args: Dictionary):
+	if !is_mode_visual(mode):
+		push_warning("[GodotVim] Attempting to jump to other end of selection while not in VISUAL mode. Ignoring...")
+		return
+	
+	var p: Vector2i = selection_from
+	selection_from = get_caret_pos()
+	set_caret_pos(p.y, p.x)
 #endregion COMMANDS
