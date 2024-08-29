@@ -7,6 +7,8 @@ var handlers: Dictionary = {
 	"delmarks": preload("res://addons/godot_vim/commands/delmarks.gd"),
 	"moveline": preload("res://addons/godot_vim/commands/moveline.gd"),
 	"movecolumn": preload("res://addons/godot_vim/commands/movecolumn.gd"),
+	"w": preload("res://addons/godot_vim/commands/w.gd"),
+	"wa": preload("res://addons/godot_vim/commands/wa.gd"),
 	
 	# GodotVIM speficic commands:
 	"reload": preload("res://addons/godot_vim/commands/reload.gd"),
