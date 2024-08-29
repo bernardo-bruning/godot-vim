@@ -3,7 +3,7 @@ const ERROR_COLOR: String = "#ff8866"
 const SPECIAL_COLOR: String = "#fcba03"
 
 const Constants = preload("res://addons/godot_vim/constants.gd")
-const Mode = Constants.Mode
+const MODE = Constants.Mode
 
 var mode_label: Label
 var main_label: RichTextLabel
@@ -54,22 +54,22 @@ func display_special(text: String):
 	main_label.text = "[color=%s]%s" % [SPECIAL_COLOR, text]
 
 
-func set_mode_text(mode: Mode):
+func set_mode_text(mode: MODE):
 	var stylebox: StyleBoxFlat = mode_label.get_theme_stylebox(&"normal")
 	match mode:
-		Mode.NORMAL:
+		MODE.NORMAL:
 			mode_label.text = "NORMAL"
 			stylebox.bg_color = Color.LIGHT_SALMON
-		Mode.INSERT:
+		MODE.INSERT:
 			mode_label.text = "INSERT"
 			stylebox.bg_color = Color.POWDER_BLUE
-		Mode.VISUAL:
+		MODE.VISUAL:
 			mode_label.text = "VISUAL"
 			stylebox.bg_color = Color.PLUM
-		Mode.VISUAL_LINE:
+		MODE.VISUAL_LINE:
 			mode_label.text = "VISUAL LINE"
 			stylebox.bg_color = Color.PLUM
-		Mode.COMMAND:
+		MODE.COMMAND:
 			mode_label.text = "COMMAND"
 			stylebox.bg_color = Color.TOMATO
 		_:

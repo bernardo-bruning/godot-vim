@@ -1,5 +1,5 @@
 const Constants = preload("res://addons/godot_vim/constants.gd")
-const Mode = Constants.Mode
+const MODE = Constants.Mode
 
 
 func execute(api: Dictionary, args: String):
@@ -13,4 +13,4 @@ func execute(api: Dictionary, args: String):
 		# api.code_edit.center_viewport_to_caret()
 	else:
 		api.status_bar.display_error('Pattern not found: "%s"' % [api.command_line.search_pattern])
-	api.cursor.set_mode(Mode.NORMAL)
+	api.cursor.set_mode(MODE.NORMAL)

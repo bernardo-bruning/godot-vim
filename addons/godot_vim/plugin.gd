@@ -349,6 +349,6 @@ func get_first_non_digit_idx(str: String) -> int:
 ## f: func(T) -> T  where T is the previous output
 func repeat_accum(count: int, inital_value: Variant, f: Callable) -> Variant:
 	var value: Variant = inital_value
-	for __ in count:
+	for _index in count:
 		value = f.call(value)
 	return value

@@ -1,9 +1,5 @@
 class_name KeyRemap extends RefCounted
 
-const Constants = preload("res://addons/godot_vim/constants.gd")
-const Mode = Constants.Mode
-
-# (Man I wish we had enum structs in godot)
 enum ApplyMode {
 	## Append this keybind to the end of the list
 	APPEND,
@@ -16,6 +12,9 @@ enum ApplyMode {
 	## Replace a keybind with this one
 	REPLACE,
 }
+
+const Constants = preload("res://addons/godot_vim/constants.gd")
+const MODE = Constants.Mode
 
 # Inner cmd
 var inner: Dictionary = {}
@@ -65,7 +64,7 @@ func action(action_type: String, args: Dictionary = {}) -> KeyRemap:
 
 
 ## Returns self
-func with_context(mode: Mode) -> KeyRemap:
+func with_context(mode: MODE) -> KeyRemap:
 	inner["context"] = mode
 	return self
 
