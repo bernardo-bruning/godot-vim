@@ -9,8 +9,6 @@ const FILE_START_IDX: int = 25
 
 func execute(api: Dictionary, _args):
 	api.marks = {}
-	
+
 	api.status_bar.display_text("Deleted all marks")
 	api.cursor.set_mode(Mode.NORMAL)
-
-

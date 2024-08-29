@@ -1,10 +1,4 @@
-enum Mode {
-	NORMAL = 0,
-	INSERT,
-	VISUAL,
-	VISUAL_LINE,
-	COMMAND
-}
+enum Mode { NORMAL = 0, INSERT, VISUAL, VISUAL_LINE, COMMAND }
 
 enum Language {
 	GDSCRIPT,
@@ -23,4 +17,3 @@ const PAIRS: Dictionary = {
 	"{": "}",
 }
 const BRACES: String = "([{}])"
-

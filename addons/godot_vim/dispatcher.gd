@@ -9,31 +9,29 @@ var handlers: Dictionary = {
 	"movecolumn": preload("res://addons/godot_vim/commands/movecolumn.gd"),
 	"w": preload("res://addons/godot_vim/commands/w.gd"),
 	"wa": preload("res://addons/godot_vim/commands/wa.gd"),
-	
 	# GodotVIM speficic commands:
 	"reload": preload("res://addons/godot_vim/commands/reload.gd"),
 	"remap": preload("res://addons/godot_vim/commands/remap.gd"),
 }
 
-var aliases: Dictionary = {
-	"delm": ":delmarks"
-}
+var aliases: Dictionary = {"delm": ":delmarks"}
 
 var globals: Dictionary
 
+
 ## Returns [enum @GlobalScope.Error]
-func dispatch(command : String, do_allow_aliases: bool = true) -> int:
-	var command_idx_end: int = command.find(' ', 1)
+func dispatch(command: String, do_allow_aliases: bool = true) -> int:
+	var command_idx_end: int = command.find(" ", 1)
 	if command_idx_end == -1:
 		command_idx_end = command.length()
-	var handler_name: String = command.substr(1, command_idx_end-1)
-	
+	var handler_name: String = command.substr(1, command_idx_end - 1)
+
 	if do_allow_aliases and aliases.has(handler_name):
-		return dispatch( aliases[handler_name], false )
-	
+		return dispatch(aliases[handler_name], false)
+
 	if not handlers.has(handler_name):
 		return ERR_DOES_NOT_EXIST
-	
+
 	var handler = handlers.get(handler_name)
 	var handler_instance = handler.new()
 	var args: String = command.substr(command_idx_end, command.length())

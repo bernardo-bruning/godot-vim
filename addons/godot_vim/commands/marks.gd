@@ -20,6 +20,7 @@ a       123     456    res://some_file
 
 """
 
+
 func row_string(mark: String, line: String, col: String, file: String) -> String:
 	var text: String = mark
 	text += " ".repeat(LINE_START_IDX - mark.length()) + line
@@ -27,14 +28,15 @@ func row_string(mark: String, line: String, col: String, file: String) -> String
 	text += " ".repeat(FILE_START_IDX - text.length()) + file
 	return text
 
+
 func mark_string(key: String, m: Dictionary) -> String:
-	var pos: Vector2i = m.get('pos', Vector2i())
-	var file: String = m.get('file', '')
+	var pos: Vector2i = m.get("pos", Vector2i())
+	var file: String = m.get("file", "")
 	return row_string(key, str(pos.y), str(pos.x), file)
 
 
 func execute(api, _args):
-	var marks: Dictionary = api.get('marks', {})
+	var marks: Dictionary = api.get("marks", {})
 	if marks.is_empty():
 		api.status_bar.display_error("No marks set")
 		api.cursor.set_mode(Mode.NORMAL)
@@ -42,13 +44,13 @@ func execute(api, _args):
 
 	var text: String = "[color=%s]List of all marks[/color]" % StatusBar.SPECIAL_COLOR
 	text += "\n" + row_string("mark", "line", "col", "file")
-	
+
 	# Display user-defined marks first (alphabet)
 	for key in marks.keys():
 		if !is_key_alphabet(key):
 			continue
 		text += "\n" + mark_string(key, marks[key])
-	
+
 	# Then display 'number' marks
 	for key in marks.keys():
 		if is_key_alphabet(key) or key == "-1":
