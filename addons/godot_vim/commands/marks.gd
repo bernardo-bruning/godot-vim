@@ -1,26 +1,22 @@
 const Constants = preload("res://addons/godot_vim/constants.gd")
 const StatusBar = preload("res://addons/godot_vim/status_bar.gd")
-const Mode = Constants.Mode
+const MODE = Constants.Mode
 
 const LINE_START_IDX: int = 8
 const COL_START_IDX: int = 16
 const FILE_START_IDX: int = 25
 
-""" Display format:
-(1) LINE_START_IDX
-(2) COL_START_IDX
-(3) FILE_START_IDX
 
-List of all marks:
-		(1)     (2)    (3)
-		|       |      |
-mark    line    col    file
-a       123     456    res://some_file
-...
-
-"""
-
-
+## Display format:
+## (1) LINE_START_IDX
+## (2) COL_START_IDX
+## (3) FILE_START_IDX
+##
+## List of all marks:
+## 		(1)     (2)    (3)
+##		|       |      |
+## mark    line    col    file
+## a       123     456    res://some_file
 func row_string(mark: String, line: String, col: String, file: String) -> String:
 	var text: String = mark
 	text += " ".repeat(LINE_START_IDX - mark.length()) + line
