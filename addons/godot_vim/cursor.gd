@@ -52,7 +52,6 @@ func _input(event: InputEvent):
 		return
 	
 	draw_cursor()
-	
 	if !has_focus() and mode != Mode.INSERT:	return
 	if !event is InputEventKey:	return
 	if !event.pressed:	return
@@ -413,7 +412,8 @@ func get_stream_char(stream: String, idx: int) -> String:
 	return stream[idx] if stream.length() > idx else ''
 
 func draw_cursor():
-	if code_edit.is_dragging_cursor():
+	
+	if code_edit.is_dragging_cursor() and code_edit.get_selected_text() != "":
 		selection_from = Vector2i(code_edit.get_selection_from_column(), code_edit.get_selection_from_line())
 	
 	if code_edit.get_selected_text(0).length() > 1 and !is_mode_visual(mode):
