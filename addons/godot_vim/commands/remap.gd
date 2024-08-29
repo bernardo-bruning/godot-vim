@@ -1,6 +1,5 @@
 const Constants = preload("res://addons/godot_vim/constants.gd")
 const StatusBar = preload("res://addons/godot_vim/status_bar.gd")
-const Mode = Constants.Mode
 
 
 func execute(api: Dictionary, _args):

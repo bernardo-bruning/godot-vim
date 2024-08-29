@@ -3,7 +3,7 @@ extends LineEdit
 const Cursor = preload("res://addons/godot_vim/cursor.gd")
 const StatusBar = preload("res://addons/godot_vim/status_bar.gd")
 const Constants = preload("res://addons/godot_vim/constants.gd")
-const Mode = Constants.Mode
+const MODE = Constants.Mode
 
 const Goto = preload("res://addons/godot_vim/commands/goto.gd")
 const Find = preload("res://addons/godot_vim/commands/find.gd")
@@ -19,7 +19,6 @@ var search_pattern: String = ''
 func _ready():
 	placeholder_text = "Enter command..."
 	show()
-	
 	text_submitted.connect(_on_text_submitted)
 	text_changed.connect(_on_text_changed)
 	editable = true
@@ -30,7 +29,6 @@ func set_command(cmd: String):
 
 func _on_text_changed(cmd: String):
 	if !cmd.begins_with('/'):	return
-	
 	# Update search
 	var pattern: String = cmd.substr(1)
 	var rmatch: RegExMatch = globals.vim_plugin.search_regex(
@@ -41,15 +39,14 @@ func _on_text_changed(cmd: String):
 	if rmatch == null:
 		code_edit.remove_secondary_carets()
 		return
-	
+
 	var pos: Vector2i = globals.vim_plugin.idx_to_pos(code_edit, rmatch.get_start())
 	if code_edit.get_caret_count() < 2:
 		code_edit.add_caret(pos.y, pos.x)
 	code_edit.select(pos.y, pos.x, pos.y, pos.x + rmatch.get_string().length(), 1)
 	# code_edit.center_viewport_to_caret(1) # why no work, eh?
-	
+
 	code_edit.scroll_vertical = code_edit.get_scroll_pos_for_line(pos.y)\
-		# Offset to center
 		- code_edit.get_visible_line_count() / 2
 
 func handle_command(cmd: String):
@@ -57,12 +54,12 @@ func handle_command(cmd: String):
 		var find = Find.new()
 		find.execute(globals, cmd)
 		return
-	
+
 	if cmd.trim_prefix(':').is_valid_int():
 		var goto = Goto.new()
 		goto.execute(globals, cmd.trim_prefix(':'))
 		return
-	
+
 	if globals.vim_plugin.dispatch(cmd) == OK:
 		set_paused(true)
 		return
@@ -83,7 +80,7 @@ func set_paused(paused: bool):
 
 func _on_text_submitted(new_text: String):
 	if is_paused:
-		cursor.set_mode(Mode.NORMAL)
+		cursor.set_mode(MODE.NORMAL)
 		status_bar.main_label.text = ''
 		return
 	handle_command(new_text)
