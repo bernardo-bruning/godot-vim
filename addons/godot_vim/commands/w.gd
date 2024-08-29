@@ -1,5 +1,5 @@
 const Constants = preload("res://addons/godot_vim/constants.gd")
-const MODE= Constants.Mode
+const MODE = Constants.Mode
 
 
 func execute(api, _args: String):

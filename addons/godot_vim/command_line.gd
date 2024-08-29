@@ -14,7 +14,8 @@ var status_bar: StatusBar
 var globals: Dictionary
 
 var is_paused: bool = false
-var search_pattern: String = ''
+var search_pattern: String = ""
+
 
 func _ready():
 	placeholder_text = "Enter command..."
@@ -23,18 +24,19 @@ func _ready():
 	text_changed.connect(_on_text_changed)
 	editable = true
 
+
 func set_command(cmd: String):
 	text = cmd
 	caret_column = text.length()
 
+
 func _on_text_changed(cmd: String):
-	if !cmd.begins_with('/'):	return
+	if !cmd.begins_with("/"):
+		return
 	# Update search
 	var pattern: String = cmd.substr(1)
 	var rmatch: RegExMatch = globals.vim_plugin.search_regex(
-		code_edit,
-		pattern,
-		cursor.get_caret_pos() + Vector2i.RIGHT
+		code_edit, pattern, cursor.get_caret_pos() + Vector2i.RIGHT
 	)
 	if rmatch == null:
 		code_edit.remove_secondary_carets()
@@ -46,31 +48,35 @@ func _on_text_changed(cmd: String):
 	code_edit.select(pos.y, pos.x, pos.y, pos.x + rmatch.get_string().length(), 1)
 	# code_edit.center_viewport_to_caret(1) # why no work, eh?
 
-	code_edit.scroll_vertical = code_edit.get_scroll_pos_for_line(pos.y)\
-		- code_edit.get_visible_line_count() / 2
+	code_edit.scroll_vertical = (
+		code_edit.get_scroll_pos_for_line(pos.y) - code_edit.get_visible_line_count() / 2
+	)
+
 
 func handle_command(cmd: String):
-	if cmd.begins_with('/'):
+	if cmd.begins_with("/"):
 		var find = Find.new()
 		find.execute(globals, cmd)
 		return
 
-	if cmd.trim_prefix(':').is_valid_int():
+	if cmd.trim_prefix(":").is_valid_int():
 		var goto = Goto.new()
-		goto.execute(globals, cmd.trim_prefix(':'))
+		goto.execute(globals, cmd.trim_prefix(":"))
 		return
 
 	if globals.vim_plugin.dispatch(cmd) == OK:
 		set_paused(true)
 		return
 
-	status_bar.display_error('Unknown command: "%s"' % [ cmd.trim_prefix(':') ])
+	status_bar.display_error('Unknown command: "%s"' % [cmd.trim_prefix(":")])
 	set_paused(true)
+
 
 func close():
 	hide()
 	clear()
 	set_paused(false)
+
 
 # Wait for user input
 func set_paused(paused: bool):
@@ -78,9 +84,10 @@ func set_paused(paused: bool):
 	text = "Press ENTER to continue" if is_paused else ""
 	editable = !is_paused
 
+
 func _on_text_submitted(new_text: String):
 	if is_paused:
 		cursor.set_mode(MODE.NORMAL)
-		status_bar.main_label.text = ''
+		status_bar.main_label.text = ""
 		return
 	handle_command(new_text)

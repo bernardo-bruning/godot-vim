@@ -39,7 +39,7 @@ func execute(api, _args):
 	var marks: Dictionary = api.get("marks", {})
 	if marks.is_empty():
 		api.status_bar.display_error("No marks set")
-		api.cursor.set_mode(Mode.NORMAL)
+		api.cursor.set_mode(MODE.NORMAL)
 		return
 
 	var text: String = "[color=%s]List of all marks[/color]" % StatusBar.SPECIAL_COLOR
