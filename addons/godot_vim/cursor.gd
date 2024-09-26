@@ -869,9 +869,15 @@ func cmd_insert(args: Dictionary):
 			code_edit.get_first_non_whitespace_column(line)
 			+ int(code_edit.get_line(line).ends_with(":"))
 		)
-		code_edit.insert_line_at(
-			line + int(line < code_edit.get_line_count() - 1), "\t".repeat(ind)
-		)
+		if line == (code_edit.get_line_count() - 1):
+			code_edit.insert_line_at(
+				line + int(line < code_edit.get_line_count() - 1), code_edit.get_line(line)
+			)
+			code_edit.set_line(code_edit.get_caret_line(), "\t".repeat(ind))
+		else:
+			code_edit.insert_line_at(
+				line + int(line < code_edit.get_line_count() - 1), "\t".repeat(ind)
+			)
 		move_line(+1)
 		set_column(ind)
 		set_mode(Mode.INSERT)
